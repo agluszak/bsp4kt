@@ -29,14 +29,14 @@ data class JsonRpcMethod(
             return JsonRpcMethod(name, parameterTypes, returnType, false)
         }
 
-        fun request(
-            name: String?,
-            returnType: Type,
-            returnTypeAdapterFactory: TypeAdapterFactory?,
-            vararg parameterTypes: Type
-        ): JsonRpcMethod {
-            return JsonRpcMethod(name, parameterTypes, returnType, returnTypeAdapterFactory, false)
-        }
+//        fun request(
+//            name: String?,
+//            returnType: Type,
+//            returnTypeAdapterFactory: TypeAdapterFactory?,
+//            vararg parameterTypes: Type
+//        ): JsonRpcMethod {
+//            return JsonRpcMethod(name, parameterTypes, returnType, returnTypeAdapterFactory, false)
+//        }
     }
 }
 

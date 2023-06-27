@@ -17,7 +17,9 @@ dependencies {
     implementation("io.github.rhdunn:xqt-kotlinx-json-rpc:1.0.3")
     implementation("io.arrow-kt:arrow-core:1.2.0-RC")
     implementation("io.arrow-kt:arrow-fx-coroutines:1.2.0-RC")
-    implementation("org.jetbrains.kotlin:kotlin-reflect:1.8.21")
+//    implementation("org.jetbrains.kotlin:kotlin-reflect:1.8.21")
+    implementation(kotlin("stdlib"))
+//    testImplementation("junit:junit:4.13.2")
 }
 
 dependencies {

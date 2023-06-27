@@ -13,7 +13,7 @@ object ServiceEndpoints {
      *
      * @return the wrapped service object
      */
-    fun <T> toServiceObject(endpoint: Endpoint?, interface_: Class<T>): T {
+    fun <T> toServiceObject(endpoint: Endpoint, interface_: Class<T>): T {
         val interfArray = arrayOf<Class<*>>(interface_, Endpoint::class.java)
         val invocationHandler = EndpointProxy(endpoint, interface_)
         return Proxy.newProxyInstance(interface_.classLoader, interfArray, invocationHandler) as T
@@ -24,11 +24,11 @@ object ServiceEndpoints {
      *
      * @return the wrapped service object
      */
-    fun toServiceObject(endpoint: Endpoint?, interfaces: Collection<Class<*>>, classLoader: ClassLoader): Any {
-        val interfArray: Array<Class<*>> = arrayOfNulls(interfaces.size + 1)
-        interfaces.toArray<Class<*>>(interfArray)
-        interfArray[interfArray.size - 1] = Endpoint::class.java
-        val invocationHandler = EndpointProxy(endpoint, interfaces)
+    fun toServiceObject(endpoint: Endpoint, interfaces: Collection<Class<*>>, classLoader: ClassLoader): Any {
+        val interfacesWithEndpoint = interfaces.toMutableList()
+        interfacesWithEndpoint.add(Endpoint::class.java)
+        val interfArray = interfacesWithEndpoint.toTypedArray()
+        val invocationHandler = EndpointProxy(endpoint, interfacesWithEndpoint)
         return Proxy.newProxyInstance(classLoader, interfArray, invocationHandler)
     }
 
@@ -37,8 +37,8 @@ object ServiceEndpoints {
      *
      * @return the wrapped service endpoint
      */
-    fun toEndpoint(serviceObject: Any?): Endpoint {
-        return GenericEndpoint(serviceObject!!)
+    fun toEndpoint(serviceObject: Any): Endpoint {
+        return GenericEndpoint(listOf(serviceObject))
     }
 
     /**
@@ -46,8 +46,8 @@ object ServiceEndpoints {
      *
      * @return the wrapped service endpoint
      */
-    fun toEndpoint(serviceObjects: Collection<Any?>?): Endpoint {
-        return GenericEndpoint(serviceObjects!!)
+    fun toEndpoint(serviceObjects: Collection<Any>): Endpoint {
+        return GenericEndpoint(serviceObjects)
     }
 
     /**
@@ -55,15 +55,15 @@ object ServiceEndpoints {
      *
      * @return the supported JsonRpcMethods
      */
-    fun getSupportedMethods(type: Class<*>): Map<String, JsonRpcMethod?> {
-        val visitedTypes: Set<Class<*>> = HashSet()
+    fun getSupportedMethods(type: Class<*>): Map<String, JsonRpcMethod> {
+        val visitedTypes = mutableSetOf<Class<*>>()
         return getSupportedMethods(type, visitedTypes)
     }
 
     /**
      * Finds all Json RPC methods on a given type
      */
-    private fun getSupportedMethods(type: Class<*>, visitedTypes: Set<Class<*>>): Map<String, JsonRpcMethod> {
+    private fun getSupportedMethods(type: Class<*>, visitedTypes: MutableSet<Class<*>>): Map<String, JsonRpcMethod> {
         val result: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         AnnotationUtil.findRpcMethods(type, visitedTypes) { methodInfo ->
             val meth: JsonRpcMethod
@@ -74,22 +74,21 @@ object ServiceEndpoints {
                 if (genericReturnType is ParameterizedType) {
                     val returnType =
                         genericReturnType.actualTypeArguments[0]
-                    var responseTypeAdapter: TypeAdapterFactory? = null
-                    val responseTypeAdapterAnnotation: ResponseJsonAdapter = methodInfo.method.getAnnotation(
-                        ResponseJsonAdapter::class.java
-                    )
-                    if (responseTypeAdapterAnnotation != null) {
-                        responseTypeAdapter = try {
-                            responseTypeAdapterAnnotation.value().getDeclaredConstructor().newInstance()
-                        } catch (e: ReflectiveOperationException) {
-                            throw RuntimeException(e)
-                        }
-                    }
+//                    var responseTypeAdapter: TypeAdapterFactory? = null
+//                    val responseTypeAdapterAnnotation: ResponseJsonAdapter = methodInfo.method.getAnnotation(
+//                        ResponseJsonAdapter::class.java
+//                    )
+//                    if (responseTypeAdapterAnnotation != null) {
+//                        responseTypeAdapter = try {
+//                            responseTypeAdapterAnnotation.value().getDeclaredConstructor().newInstance()
+//                        } catch (e: ReflectiveOperationException) {
+//                            throw RuntimeException(e)
+//                        }
+//                    }
                     meth = JsonRpcMethod.request(
                         methodInfo.name,
                         returnType,
-                        responseTypeAdapter,
-                        methodInfo.parameterTypes
+                        *methodInfo.parameterTypes
                     )
                 } else {
                     throw IllegalStateException("Expecting return type of CompletableFuture but was : $genericReturnType")

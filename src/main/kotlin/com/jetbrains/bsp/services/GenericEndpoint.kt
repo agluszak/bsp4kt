@@ -15,30 +15,26 @@ import java.util.logging.Logger
  * An endpoint that reflectively delegates to [JsonNotification] and
  * [JsonRequest] methods of one or more given delegate objects.
  */
-class GenericEndpoint : Endpoint {
-    private val methodHandlers = LinkedHashMap<String, Function<Any?, CompletableFuture<*>>?>()
-    private val delegates: List<Any>
+class GenericEndpoint(vararg delegates: Any) : Endpoint {
+    private val delegates: Collection<Any>
+    private val methodHandlers = LinkedHashMap<String, Function<Any?, CompletableFuture<*>?>>()
 
-    constructor(delegate: Any) {
-        delegates = listOf(delegate)
-        recursiveFindRpcMethods(delegate, HashSet(), HashSet())
-    }
-
-    constructor(delegates: Collection<Any>?) {
-        this.delegates = ArrayList(delegates)
+    init {
+        assert(delegates.isNotEmpty())
+        this.delegates = delegates.asList()
         for (delegate in this.delegates) {
             recursiveFindRpcMethods(delegate, HashSet(), HashSet())
         }
     }
 
-    protected fun recursiveFindRpcMethods(current: Any, visited: MutableSet<Class<*>?>, visitedForDelegate: MutableSet<Class<*>?>) {
+    protected fun recursiveFindRpcMethods(current: Any, visited: MutableSet<Class<*>>, visitedForDelegate: MutableSet<Class<*>>) {
         AnnotationUtil.findRpcMethods(current.javaClass, visited) { methodInfo ->
             val handler =
                 Function { arg: Any? ->
                     try {
                         val method: Method = methodInfo.method
                         val arguments = getArguments(method, arg)
-                        return@Function method.invoke(current, *arguments) as CompletableFuture<*>
+                        return@Function method.invoke(current, *arguments) as CompletableFuture<*>?
                     } catch (e: InvocationTargetException) {
                         throw RuntimeException(e)
                     } catch (e: IllegalAccessException) {
@@ -100,7 +96,7 @@ class GenericEndpoint : Endpoint {
         // Check the registered method handlers
         val handler = methodHandlers[method]
         if (handler != null) {
-            return handler.apply(parameter)
+            return handler.apply(parameter)!!
         }
 
         // Ask the delegate objects whether they can handle the request generically

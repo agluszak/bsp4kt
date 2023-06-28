@@ -200,7 +200,7 @@ class EndpointsTest {
 
     @Test
     fun testIssue106() {
-        val foo: Foo = ServiceEndpoints.toServiceObject(GenericEndpoint(listOf(Any())), Foo::class.java)
+        val foo: Foo = ServiceEndpoints.toServiceObject(GenericEndpoint(Any()), Foo::class.java)
         assertEquals(foo, foo)
     }
 

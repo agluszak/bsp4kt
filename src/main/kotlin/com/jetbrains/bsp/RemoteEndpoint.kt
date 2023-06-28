@@ -273,16 +273,14 @@ class RemoteEndpoint(
     }
 
     protected fun createResultResponseMessage(requestMessage: RequestMessage, result: Any?): ResponseMessage {
-        val responseMessage: ResponseMessage = ResponseMessage(requestMessage.id, result)
-        return responseMessage
+        return ResponseMessage(requestMessage.id, result)
     }
 
     protected fun createErrorResponseMessage(
         requestMessage: RequestMessage,
         errorObject: ResponseError?
     ): ResponseMessage {
-        val responseMessage: ResponseMessage = ResponseMessage(requestMessage.id, error = errorObject)
-        return responseMessage
+        return ResponseMessage(requestMessage.id, error = errorObject)
     }
 
     protected fun isCancellation(t: Throwable?): Boolean {

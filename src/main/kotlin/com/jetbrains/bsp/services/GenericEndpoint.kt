@@ -27,7 +27,7 @@ class GenericEndpoint(vararg delegates: Any) : Endpoint {
         }
     }
 
-    protected fun recursiveFindRpcMethods(current: Any, visited: MutableSet<Class<*>>, visitedForDelegate: MutableSet<Class<*>>) {
+     fun recursiveFindRpcMethods(current: Any, visited: MutableSet<Class<*>>, visitedForDelegate: MutableSet<Class<*>>) {
         AnnotationUtil.findRpcMethods(current.javaClass, visited) { methodInfo ->
             val handler =
                 Function { arg: Any? ->
@@ -64,7 +64,7 @@ class GenericEndpoint(vararg delegates: Any) : Endpoint {
         }
     }
 
-    protected fun getArguments(method: Method, arg: Any?): Array<Any?> {
+     fun getArguments(method: Method, arg: Any?): Array<Any?> {
         val parameterCount = method.parameterCount
         if (parameterCount == 0) {
             if (arg != null) {
@@ -73,19 +73,18 @@ class GenericEndpoint(vararg delegates: Any) : Endpoint {
             return NO_ARGUMENTS
         }
         if (arg is List<*>) {
-            val arguments = arg
-            val argumentCount = arguments.size
+            val argumentCount = arg.size
             if (argumentCount == parameterCount) {
-                return arguments.toTypedArray()
+                return arg.toTypedArray()
             }
             if (argumentCount > parameterCount) {
-                val unexpectedArguments = arguments.stream().skip(parameterCount.toLong())
+                val unexpectedArguments = arg.stream().skip(parameterCount.toLong())
                 val unexpectedParams = unexpectedArguments.map { a: Any? -> "'$a'" }
                     .reduce { a: String, a2: String -> "$a, $a2" }.get()
                 LOG.warning("Unexpected params $unexpectedParams for '$method' is ignored")
-                return arguments.subList(0, parameterCount).toTypedArray()
+                return arg.subList(0, parameterCount).toTypedArray()
             }
-            return arguments.toTypedArray<Any?>()
+            return arg.toTypedArray<Any?>().copyOf(parameterCount)
         }
         val arguments = arrayOfNulls<Any>(parameterCount)
         arguments[0] = arg
@@ -150,7 +149,7 @@ class GenericEndpoint(vararg delegates: Any) : Endpoint {
         }
     }
 
-    protected fun isOptionalMethod(method: String?): Boolean {
+     fun isOptionalMethod(method: String?): Boolean {
         return method != null && method.startsWith("$/")
     }
 

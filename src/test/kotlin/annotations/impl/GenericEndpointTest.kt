@@ -57,7 +57,7 @@ class GenericEndpointTest {
     fun testMultiServices() {
         val foo: Foo = Foo()
         val bar: Bar = Bar()
-        val endpoint = GenericEndpoint(Arrays.asList(foo, bar))
+        val endpoint = GenericEndpoint(foo, bar)
         endpoint.notify("myNotification", null)
         endpoint.notify("barrr", null)
         endpoint.notify("other/myNotification", null)
@@ -109,7 +109,7 @@ class GenericEndpointTest {
     }
 
     @Throws(Exception::class)
-    protected fun testZeroParams(params: Any?, predicate: Predicate<String>? = null) {
+     fun testZeroParams(params: Any?, predicate: Predicate<String>? = null) {
         var logMessages: LogMessageAccumulator? = null
         try {
             if (predicate != null) {
@@ -155,7 +155,7 @@ class GenericEndpointTest {
     }
 
     @Throws(Exception::class)
-    protected fun testSingleParams(params: Any?, expectedString: String?, predicate: Predicate<String>? = null) {
+     fun testSingleParams(params: Any?, expectedString: String?, predicate: Predicate<String>? = null) {
         var logMessages: LogMessageAccumulator? = null
         try {
             if (predicate != null) {
@@ -203,7 +203,7 @@ class GenericEndpointTest {
     }
 
     @Throws(Exception::class)
-    protected fun testMultiParams(
+     fun testMultiParams(
         params: Any?, expectedString: String?, expectedInt: Int?, predicate: Predicate<String>? = null
     ) {
         var logMessages: LogMessageAccumulator? = null

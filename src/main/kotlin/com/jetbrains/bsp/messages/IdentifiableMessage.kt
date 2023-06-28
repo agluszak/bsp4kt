@@ -3,10 +3,10 @@ package com.jetbrains.bsp.messages
 import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
+import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.SerialKind
+import kotlinx.serialization.descriptors.buildSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonDecoder
@@ -25,7 +25,10 @@ abstract class IdentifiableMessage : Message() {
 
 class EitherSerializer<L, R>(private val leftSerializer: KSerializer<L>, private val rightSerializer: KSerializer<R>) :
     KSerializer<Either<L, R>> {
-    override val descriptor: SerialDescriptor = TODO()
+    @OptIn(ExperimentalSerializationApi::class, InternalSerializationApi::class)
+    override val descriptor: SerialDescriptor = buildSerialDescriptor("asd", SerialKind.ENUM, leftSerializer.descriptor, rightSerializer.descriptor) {
+
+    }
 
     override fun deserialize(decoder: Decoder): Either<L, R> {
         require(decoder is JsonDecoder) { "only works in JSON format" }

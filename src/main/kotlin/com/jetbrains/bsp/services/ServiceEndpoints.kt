@@ -38,7 +38,7 @@ object ServiceEndpoints {
      * @return the wrapped service endpoint
      */
     fun toEndpoint(serviceObject: Any): Endpoint {
-        return GenericEndpoint(listOf(serviceObject))
+        return GenericEndpoint(serviceObject)
     }
 
     /**
@@ -47,7 +47,7 @@ object ServiceEndpoints {
      * @return the wrapped service endpoint
      */
     fun toEndpoint(serviceObjects: Collection<Any>): Endpoint {
-        return GenericEndpoint(serviceObjects)
+        return GenericEndpoint(*serviceObjects.toTypedArray())
     }
 
     /**

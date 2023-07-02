@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import java.io.*
 import java.util.function.Consumer
+import kotlin.reflect.typeOf
 
 
 class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonRpcMethod>) {
@@ -49,7 +50,7 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
 
 
     companion object {
-        val CANCEL_METHOD: JsonRpcMethod = JsonRpcMethod.notification("$/cancelRequest", CancelParams::class.java)
+        val CANCEL_METHOD: JsonRpcMethod = JsonRpcMethod.notification("$/cancelRequest", typeOf<CancelParams>())
 //        private var toStringInstance: MessageJsonHandler? = null
 //
 //        /**

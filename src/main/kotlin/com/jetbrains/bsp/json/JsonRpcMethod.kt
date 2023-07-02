@@ -1,13 +1,15 @@
 package com.jetbrains.bsp.json
 
 import java.lang.reflect.Type
+import kotlin.reflect.KType
+import kotlin.reflect.typeOf
 
 
 /**
  * A description of a JSON-RPC method.
  */
 data class JsonRpcMethod(
-    val methodName: String, val parameterTypes: Array<out Type>, val returnType: Type, val isNotification: Boolean
+    val methodName: String, val parameterTypes: List<KType>, val returnType: KType, val isNotification: Boolean
 ) {
 
     override fun toString(): String {
@@ -21,12 +23,12 @@ data class JsonRpcMethod(
     }
 
     companion object {
-        fun notification(name: String, vararg parameterTypes: Type): JsonRpcMethod {
-            return JsonRpcMethod(name, parameterTypes, Void::class.java, true)
+        fun notification(name: String, vararg parameterTypes: KType): JsonRpcMethod {
+            return JsonRpcMethod(name, parameterTypes.toList(), typeOf<Unit>(), true)
         }
 
-        fun request(name: String, returnType: Type, vararg parameterTypes: Type): JsonRpcMethod {
-            return JsonRpcMethod(name, parameterTypes, returnType, false)
+        fun request(name: String, returnType: KType, vararg parameterTypes: KType): JsonRpcMethod {
+            return JsonRpcMethod(name, parameterTypes.toList(), returnType, false)
         }
 
 //        fun request(

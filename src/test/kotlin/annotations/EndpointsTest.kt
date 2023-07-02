@@ -12,6 +12,7 @@ import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
+import kotlin.reflect.typeOf
 
 
 class EndpointsTest {
@@ -159,13 +160,13 @@ class EndpointsTest {
     fun testRpcMethods_01() {
         val methods: Map<String, JsonRpcMethod> = ServiceEndpoints.getSupportedMethods(Foo::class.java)
         assertEquals("foo/doStuff", methods["foo/doStuff"]!!.methodName)
-        assertEquals(String::class.java, methods["foo/doStuff"]!!.parameterTypes[0])
+        assertEquals(typeOf<String>(), methods["foo/doStuff"]!!.parameterTypes[0])
         assertFalse(methods["foo/doStuff"]!!.isNotification)
         assertEquals("foo/myNotification", methods["foo/myNotification"]!!.methodName)
-        assertEquals(String::class.java, methods["foo/myNotification"]!!.parameterTypes[0])
+        assertEquals(typeOf<String>(), methods["foo/myNotification"]!!.parameterTypes[0])
         assertTrue(methods["foo/myNotification"]!!.isNotification)
         assertEquals("hubba", methods["hubba"]!!.methodName)
-        assertEquals(String::class.java, methods["hubba"]!!.parameterTypes[0])
+        assertEquals(typeOf<String>(), methods["hubba"]!!.parameterTypes[0])
         assertTrue(methods["hubba"]!!.isNotification)
     }
 
@@ -175,20 +176,20 @@ class EndpointsTest {
         val requestMethod: JsonRpcMethod = methods["bar/doStuff2"]!!
         assertEquals("bar/doStuff2", requestMethod.methodName)
         assertEquals(2, requestMethod.parameterTypes.size)
-        assertEquals(String::class.java, requestMethod.parameterTypes[0])
-        assertEquals(Int::class.java, requestMethod.parameterTypes[1])
+        assertEquals(typeOf<String>(), requestMethod.parameterTypes[0])
+        assertEquals(typeOf<Int>(), requestMethod.parameterTypes[1])
         assertFalse(requestMethod.isNotification)
         val notificationMethod: JsonRpcMethod = methods["bar/myNotification2"]!!
         assertEquals("bar/myNotification2", notificationMethod.methodName)
         assertEquals(2, notificationMethod.parameterTypes.size)
-        assertEquals(String::class.java, notificationMethod.parameterTypes[0])
-        assertEquals(Int::class.java, notificationMethod.parameterTypes[1])
+        assertEquals(typeOf<String>(), notificationMethod.parameterTypes[0])
+        assertEquals(typeOf<Int>(), notificationMethod.parameterTypes[1])
         assertTrue(notificationMethod.isNotification)
         val delegateMethod: JsonRpcMethod = methods["hubba"]!!
         assertEquals("hubba", delegateMethod.methodName)
         assertEquals(2, delegateMethod.parameterTypes.size)
-        assertEquals(String::class.java, delegateMethod.parameterTypes[0])
-        assertEquals(Int::class.java, delegateMethod.parameterTypes[1])
+        assertEquals(typeOf<String>(), delegateMethod.parameterTypes[0])
+        assertEquals(typeOf<Int>(), delegateMethod.parameterTypes[1])
         assertTrue(delegateMethod.isNotification)
     }
 
@@ -212,7 +213,7 @@ class EndpointsTest {
         val method: JsonRpcMethod = methods["consumer/accept"]!!
         assertEquals("consumer/accept", method.methodName)
         assertEquals(1, method.parameterTypes.size)
-        assertEquals(String::class.java, method.parameterTypes[0])
+        assertEquals(typeOf<String>(), method.parameterTypes[0])
         assertTrue(method.isNotification)
     }
 

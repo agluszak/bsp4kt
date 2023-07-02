@@ -88,7 +88,10 @@ class RemoteEndpoint(
         return RequestMessage(id, method, parameter)
     }
 
-    protected fun sendCancelNotification(id: MessageId) {
+    protected fun sendCancelNotification(id: MessageId?) {
+        if (id == null) {
+            return
+        }
         val cancelParams = CancelParams(id)
         notify(MessageJsonHandler.CANCEL_METHOD.methodName, cancelParams)
     }
@@ -289,7 +292,7 @@ class RemoteEndpoint(
         } else t is CancellationException
     }
 
-    override fun resolveMethod(requestId: MessageId): String? {
+    override fun resolveMethod(requestId: MessageId?): String? {
         synchronized(sentRequestMap) {
             val requestInfo =
                 sentRequestMap[requestId]

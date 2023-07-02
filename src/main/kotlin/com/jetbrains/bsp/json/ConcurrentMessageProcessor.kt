@@ -12,7 +12,7 @@ import java.util.logging.Logger
 /**
  * This class connects a message producer with a message consumer by listening for new messages in a dedicated thread.
  */
-class ConcurrentMessageProcessor(messageProducer: MessageProducer, messageConsumer: MessageConsumer) : Runnable {
+open class ConcurrentMessageProcessor(messageProducer: MessageProducer, messageConsumer: MessageConsumer) : Runnable {
     private var isRunning = false
     private val messageProducer: MessageProducer
     private val messageConsumer: MessageConsumer
@@ -28,7 +28,7 @@ class ConcurrentMessageProcessor(messageProducer: MessageProducer, messageConsum
      * @param executorService - the thread is started using this service
      * @return a future that is resolved when the started thread is terminated, e.g. by closing a stream
      */
-    fun beginProcessing(executorService: ExecutorService): Future<Void> {
+    fun beginProcessing(executorService: ExecutorService): Future<Unit> {
         val result = executorService.submit(this)
         return wrapFuture(result, messageProducer)
     }
@@ -44,28 +44,28 @@ class ConcurrentMessageProcessor(messageProducer: MessageProducer, messageConsum
         }
     }
 
-    protected fun processingStarted() {
+    protected open fun processingStarted() {
         check(!isRunning) { "The message processor is already running." }
         isRunning = true
     }
 
-    protected fun processingEnded() {
+    protected open fun processingEnded() {
         isRunning = false
     }
 
     companion object {
-        fun wrapFuture(result: Future<*>, messageProducer: MessageProducer): Future<Void> {
-            return object : Future<Void> {
+        fun wrapFuture(result: Future<*>, messageProducer: MessageProducer): Future<Unit> {
+            return object : Future<Unit> {
                 @Throws(InterruptedException::class, ExecutionException::class)
-                override fun get(): Void {
-                    return result.get() as Void
+                override fun get(): Unit {
+                    result.get()
                 }
 
                 @Throws(
                     InterruptedException::class, ExecutionException::class, TimeoutException::class
                 )
-                override fun get(timeout: Long, unit: TimeUnit): Void {
-                    return result[timeout, unit] as Void
+                override fun get(timeout: Long, unit: TimeUnit): Unit {
+                    result.get(timeout, unit)
                 }
 
                 override fun isDone(): Boolean {

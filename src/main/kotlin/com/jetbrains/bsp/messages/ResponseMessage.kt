@@ -12,5 +12,5 @@ import kotlinx.serialization.Serializable
  */
 // TODO: Use either
 @Serializable
-data class ResponseMessage(override val id: MessageId, val result: @Contextual Any? = null, val error: ResponseError? = null) : IdentifiableMessage()
+data class ResponseMessage(override val id: MessageId?, val result: @Contextual Any? = null, val error: ResponseError? = null) : IdentifiableMessage()
 

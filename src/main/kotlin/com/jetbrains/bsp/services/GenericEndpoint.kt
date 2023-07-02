@@ -10,31 +10,43 @@ import java.util.concurrent.CompletableFuture
 import java.util.function.Function
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.reflect.KClass
+import kotlin.reflect.KFunction
 
 /**
  * An endpoint that reflectively delegates to [JsonNotification] and
  * [JsonRequest] methods of one or more given delegate objects.
  */
-class GenericEndpoint(vararg delegates: Any) : Endpoint {
-    private val delegates: Collection<Any>
-    private val methodHandlers = LinkedHashMap<String, Function<Any?, CompletableFuture<*>?>>()
+class GenericEndpoint<T>(delegate: T) : Endpoint {
+    private val methodHandlers = LinkedHashMap<String, Function<List<Any?>, CompletableFuture<*>?>>()
 
     init {
-        assert(delegates.isNotEmpty())
-        this.delegates = delegates.asList()
-        for (delegate in this.delegates) {
-            recursiveFindRpcMethods(delegate, HashSet(), HashSet())
-        }
+        recursiveFindRpcMethods(delegate, HashSet())
     }
 
-     fun recursiveFindRpcMethods(current: Any, visited: MutableSet<Class<*>>, visitedForDelegate: MutableSet<Class<*>>) {
-        AnnotationUtil.findRpcMethods(current.javaClass, visited) { methodInfo ->
+     private fun recursiveFindRpcMethods(current: T, visited: MutableSet<KClass<*>>) {
+        AnnotationUtil.findRpcMethods(current!!::class, visited) { methodInfo ->
             val handler =
-                Function { arg: Any? ->
+                Function { args: List<Any?> ->
                     try {
-                        val method: Method = methodInfo.method
-                        val arguments = getArguments(method, arg)
-                        return@Function method.invoke(current, *arguments) as CompletableFuture<*>?
+                        val method: KFunction<*> = methodInfo.method
+                        val argumentCount = args.size
+                        val parameterCount = method.parameters.size
+                        val arguments = if (argumentCount == parameterCount) {
+                            args
+                        } else if (argumentCount < parameterCount){
+                            // Take as many as there are and fill the rest with nulls
+                            val missing = parameterCount - argumentCount
+                            args + List(missing) { null }
+                        } else {
+                            // Take as many as there are parameters and log a warning for the rest
+                            args.take(parameterCount).also {
+                                args.drop(parameterCount).forEach {
+                                    LOG.warning("Unexpected param '$it' for '$method' is ignored")
+                                }
+                            }
+                        }
+                        return@Function method.call(current, *arguments.toTypedArray()) as CompletableFuture<*>?
                     } catch (e: InvocationTargetException) {
                         throw RuntimeException(e)
                     } catch (e: IllegalAccessException) {
@@ -48,65 +60,13 @@ class GenericEndpoint(vararg delegates: Any) : Endpoint {
                 ) == null
             ) { "Multiple methods for name " + methodInfo.name }
         }
-        AnnotationUtil.findDelegateSegments(current.javaClass, visitedForDelegate) { method ->
-            try {
-                val delegate: Any = method.invoke(current)
-                if (delegate != null) {
-                    recursiveFindRpcMethods(delegate, visited, visitedForDelegate)
-                } else {
-                    LOG.fine("A delegate object is null, jsonrpc methods of '$method' are ignored")
-                }
-            } catch (e: InvocationTargetException) {
-                throw RuntimeException(e)
-            } catch (e: IllegalAccessException) {
-                throw RuntimeException(e)
-            }
-        }
     }
 
-     fun getArguments(method: Method, arg: Any?): Array<Any?> {
-        val parameterCount = method.parameterCount
-        if (parameterCount == 0) {
-            if (arg != null) {
-                LOG.warning("Unexpected params '$arg' for '$method' is ignored")
-            }
-            return NO_ARGUMENTS
-        }
-        if (arg is List<*>) {
-            val argumentCount = arg.size
-            if (argumentCount == parameterCount) {
-                return arg.toTypedArray()
-            }
-            if (argumentCount > parameterCount) {
-                val unexpectedArguments = arg.stream().skip(parameterCount.toLong())
-                val unexpectedParams = unexpectedArguments.map { a: Any? -> "'$a'" }
-                    .reduce { a: String, a2: String -> "$a, $a2" }.get()
-                LOG.warning("Unexpected params $unexpectedParams for '$method' is ignored")
-                return arg.subList(0, parameterCount).toTypedArray()
-            }
-            return arg.toTypedArray<Any?>().copyOf(parameterCount)
-        }
-        val arguments = arrayOfNulls<Any>(parameterCount)
-        arguments[0] = arg
-        return arguments
-    }
-
-    override fun request(method: String, parameter: Any?): CompletableFuture<*> {
+    override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
         // Check the registered method handlers
         val handler = methodHandlers[method]
         if (handler != null) {
-            return handler.apply(parameter)!!
-        }
-
-        // Ask the delegate objects whether they can handle the request generically
-        val futures: MutableList<CompletableFuture<*>> = ArrayList(delegates.size)
-        for (delegate in delegates) {
-            if (delegate is Endpoint) {
-                futures.add((delegate as Endpoint).request(method, parameter))
-            }
-        }
-        if (!futures.isEmpty()) {
-            return CompletableFuture.anyOf(*futures.toTypedArray<CompletableFuture<*>>())
+            return handler.apply(params)!!
         }
 
         // Create a log message about the unsupported method
@@ -122,7 +82,7 @@ class GenericEndpoint(vararg delegates: Any) : Endpoint {
         return exceptionalResult
     }
 
-    override fun notify(method: String, parameter: Any?) {
+    override fun notify(method: String, parameter: List<Any?>) {
         // Check the registered method handlers
         val handler = methodHandlers[method]
         if (handler != null) {
@@ -130,31 +90,20 @@ class GenericEndpoint(vararg delegates: Any) : Endpoint {
             return
         }
 
-        // Ask the delegate objects whether they can handle the notification generically
-        var notifiedDelegates = 0
-        for (delegate in delegates) {
-            if (delegate is Endpoint) {
-                (delegate as Endpoint).notify(method, parameter)
-                notifiedDelegates++
-            }
-        }
-        if (notifiedDelegates == 0) {
-            // Create a log message about the unsupported method
-            val message = "Unsupported notification method: $method"
-            if (isOptionalMethod(method)) {
-                LOG.log(Level.INFO, message)
-            } else {
-                LOG.log(Level.WARNING, message)
-            }
+        // Create a log message about the unsupported method
+        val message = "Unsupported notification method: $method"
+        if (isOptionalMethod(method)) {
+            LOG.log(Level.INFO, message)
+        } else {
+            LOG.log(Level.WARNING, message)
         }
     }
 
-     fun isOptionalMethod(method: String?): Boolean {
+     private fun isOptionalMethod(method: String?): Boolean {
         return method != null && method.startsWith("$/")
     }
 
     companion object {
         private val LOG = Logger.getLogger(GenericEndpoint::class.java.name)
-        private val NO_ARGUMENTS = arrayOf<Any?>()
     }
 }

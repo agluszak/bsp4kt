@@ -20,7 +20,7 @@ val MessageId.asString: String
     }
 
 abstract class IdentifiableMessage : Message() {
-    abstract val id: MessageId
+    abstract val id: MessageId?
 }
 
 class EitherSerializer<L, R>(private val leftSerializer: KSerializer<L>, private val rightSerializer: KSerializer<R>) :

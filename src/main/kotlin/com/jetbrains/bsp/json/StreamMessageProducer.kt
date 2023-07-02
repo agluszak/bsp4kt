@@ -10,6 +10,7 @@ import java.io.InputStream
 import java.nio.charset.StandardCharsets
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.reflect.jvm.jvmName
 
 
 /**
@@ -165,6 +166,6 @@ class StreamMessageProducer(
     }
 
     companion object {
-        private val LOG = Logger.getLogger(StreamMessageProducer::class.java.name)
+        private val LOG = Logger.getLogger(StreamMessageProducer::class.jvmName)
     }
 }

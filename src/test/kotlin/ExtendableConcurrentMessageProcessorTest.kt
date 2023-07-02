@@ -14,6 +14,7 @@ import java.io.PipedInputStream
 import java.io.PipedOutputStream
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import kotlin.reflect.KClass
 
 /**
  * This is a test to verify that it is easy for a client to override the construction
@@ -32,7 +33,7 @@ class ExtendableConcurrentMessageProcessorTest {
     @Throws(Exception::class)
     fun testIdentifyClientRequest() {
         val contextStore = MessageContextStore<MyClient>()
-        val testContext = TestContextWrapper(contextStore)
+        val testContext = TestContextWrapper<MyServer, MyClient>(contextStore)
 
         // create client side
         val `in` = PipedInputStream()
@@ -42,16 +43,16 @@ class ExtendableConcurrentMessageProcessorTest {
         `in`.connect(out2)
         out.connect(in2)
         val client: MyClient = MyClientImpl()
-        val clientSideLauncher: Launcher<MyServer> = Launcher.createLauncher(
+        val clientSideLauncher: Launcher<MyClient, MyServer> = Launcher.createLauncher(
             client,
-            MyServer::class.java, `in`, out
+            MyServer::class, `in`, out
         )
 
         // create server side
         val server: MyServer = MyServerImpl(testContext)
 
-        val serverSideLauncher: Launcher<MyClient> = testContext.createLauncher(
-            server, MyClient::class.java, in2, out2
+        val serverSideLauncher: Launcher<MyServer, MyClient> = testContext.createLauncher(
+            server, MyClient::class, in2, out2
         )
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
@@ -97,7 +98,7 @@ class ExtendableConcurrentMessageProcessorTest {
 
     data class MyParam(val value: String)
 
-    class MyServerImpl(val testContext: TestContextWrapper<MyClient>) : MyServer {
+    class MyServerImpl(val testContext: TestContextWrapper<MyServer, MyClient>) : MyServer {
         override fun askServer(param: MyParam): CompletableFuture<MyParam> {
             testContext.error = false
             return CompletableFuture.completedFuture(param)
@@ -145,17 +146,17 @@ class ExtendableConcurrentMessageProcessorTest {
     /*
 	 * A class used to store the results of the test (success or failure)
 	 */
-    class TestContextWrapper<T>(val store: MessageContextStore<T>, var error: Boolean = false) {
+    class TestContextWrapper<Local : Any, Remote : Any>(val store: MessageContextStore<Remote>, var error: Boolean = false) {
         fun createLauncher(
-            localService: Any,
-            remoteInterface: Class<T>,
+            localService: Local,
+            remoteInterface: KClass<Remote>,
             `in`: InputStream,
             out: OutputStream
-        ): Launcher<T> {
-            return object : Launcher.Builder<T>(`in`, out, localService, remoteInterface) {
-                protected override fun createMessageProcessor(
+        ): Launcher<Local, Remote> {
+            return object : Launcher.Builder<Local, Remote>(`in`, out, localService, remoteInterface) {
+                override fun createMessageProcessor(
                     reader: MessageProducer,
-                    messageConsumer: MessageConsumer, remoteProxy: T
+                    messageConsumer: MessageConsumer, remoteProxy: Remote
                 ): ConcurrentMessageProcessor {
                     return CustomConcurrentMessageProcessor(reader, messageConsumer, remoteProxy, store)
                 }

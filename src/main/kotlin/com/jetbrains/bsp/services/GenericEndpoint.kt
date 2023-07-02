@@ -5,13 +5,13 @@ import com.jetbrains.bsp.ResponseErrorException
 import com.jetbrains.bsp.messages.ResponseError
 import com.jetbrains.bsp.messages.ResponseErrorCode
 import java.lang.reflect.InvocationTargetException
-import java.lang.reflect.Method
 import java.util.concurrent.CompletableFuture
 import java.util.function.Function
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
+import kotlin.reflect.jvm.jvmName
 
 /**
  * An endpoint that reflectively delegates to [JsonNotification] and
@@ -31,7 +31,7 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
                     try {
                         val method: KFunction<*> = methodInfo.method
                         val argumentCount = args.size
-                        val parameterCount = method.parameters.size
+                        val parameterCount = method.parameters.size - 1 // -1 for the receiver
                         val arguments = if (argumentCount == parameterCount) {
                             args
                         } else if (argumentCount < parameterCount){
@@ -41,12 +41,17 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
                         } else {
                             // Take as many as there are parameters and log a warning for the rest
                             args.take(parameterCount).also {
-                                args.drop(parameterCount).forEach {
-                                    LOG.warning("Unexpected param '$it' for '$method' is ignored")
+                                val unexpectedArgs = args.drop(parameterCount)
+                                LOG.warning("Unexpected params '$unexpectedArgs' for '$method' are ignored")
                                 }
-                            }
                         }
-                        return@Function method.call(current, *arguments.toTypedArray()) as CompletableFuture<*>?
+
+                        val result = method.call(current, *arguments.toTypedArray())
+                        if (result is CompletableFuture<*>) {
+                            return@Function result
+                        } else {
+                            return@Function null
+                        }
                     } catch (e: InvocationTargetException) {
                         throw RuntimeException(e)
                     } catch (e: IllegalAccessException) {
@@ -82,11 +87,11 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
         return exceptionalResult
     }
 
-    override fun notify(method: String, parameter: List<Any?>) {
+    override fun notify(method: String, params: List<Any?>) {
         // Check the registered method handlers
         val handler = methodHandlers[method]
         if (handler != null) {
-            handler.apply(parameter)
+            handler.apply(params)
             return
         }
 
@@ -104,6 +109,6 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
     }
 
     companion object {
-        private val LOG = Logger.getLogger(GenericEndpoint::class.java.name)
+        private val LOG = Logger.getLogger(GenericEndpoint::class.jvmName)
     }
 }

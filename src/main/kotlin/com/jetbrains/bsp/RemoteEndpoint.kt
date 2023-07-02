@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Function
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.reflect.jvm.jvmName
 
 /**
  * An endpoint that can be used to send messages to a given [MessageConsumer] by calling
@@ -45,8 +46,8 @@ class RemoteEndpoint(
     /**
      * Send a notification to the remote endpoint.
      */
-    override fun notify(method: String, parameter: Any?) {
-        val notificationMessage: NotificationMessage = NotificationMessage(method, parameter)
+    override fun notify(method: String, params: List<Any?>) {
+        val notificationMessage: NotificationMessage = NotificationMessage(method, params)
         try {
             out.consume(notificationMessage)
         } catch (exception: Exception) {
@@ -58,8 +59,8 @@ class RemoteEndpoint(
     /**
      * Send a request to the remote endpoint.
      */
-    override fun request(method: String, parameter: Any?): CompletableFuture<Any?> {
-        val requestMessage: RequestMessage = createRequestMessage(method, parameter)
+    override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
+        val requestMessage: RequestMessage = createRequestMessage(method, params)
         val result: CompletableFuture<Any?> = object : CompletableFuture<Any?>() {
             override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
                 sendCancelNotification(requestMessage.id)
@@ -83,9 +84,9 @@ class RemoteEndpoint(
         return result
     }
 
-    protected fun createRequestMessage(method: String, parameter: Any?): RequestMessage {
+    protected fun createRequestMessage(method: String, params: List<Any?>): RequestMessage {
         val id = nextRequestId.incrementAndGet().left()
-        return RequestMessage(id, method, parameter)
+        return RequestMessage(id, method, params)
     }
 
     protected fun sendCancelNotification(id: MessageId?) {
@@ -93,7 +94,7 @@ class RemoteEndpoint(
             return
         }
         val cancelParams = CancelParams(id)
-        notify(MessageJsonHandler.CANCEL_METHOD.methodName, cancelParams)
+        notify(MessageJsonHandler.CANCEL_METHOD.methodName, listOf(cancelParams))
     }
 
     override fun consume(message: Message) {
@@ -159,7 +160,7 @@ class RemoteEndpoint(
      */
     protected fun handleCancellation(notificationMessage: NotificationMessage): Boolean {
         if (MessageJsonHandler.CANCEL_METHOD.methodName == notificationMessage.method) {
-            val cancelParams = notificationMessage.params
+            val cancelParams = notificationMessage.params[0]
             if (cancelParams != null) {
                 if (cancelParams is CancelParams) {
                     synchronized(receivedRequestMap) {
@@ -304,7 +305,7 @@ class RemoteEndpoint(
     }
 
     companion object {
-        private val LOG = Logger.getLogger(RemoteEndpoint::class.java.name)
+        private val LOG = Logger.getLogger(RemoteEndpoint::class.jvmName)
         val DEFAULT_EXCEPTION_HANDLER: Function<Throwable, ResponseError> =
             Function<Throwable, ResponseError> { throwable: Throwable ->
                 if (throwable is ResponseErrorException) {

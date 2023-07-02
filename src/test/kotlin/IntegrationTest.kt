@@ -18,6 +18,7 @@ import java.io.PipedOutputStream
 import java.util.concurrent.*
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.reflect.jvm.jvmName
 
 class IntegrationTest {
     class MyParam(val value: String)
@@ -60,11 +61,11 @@ class IntegrationTest {
         `in`.connect(out2)
         out.connect(in2)
         val client: MyClient = MyClientImpl()
-        val clientSideLauncher: Launcher<MyServer> = Launcher.createLauncher(client, MyServer::class.java, `in`, out)
+        val clientSideLauncher: Launcher<MyClient, MyServer> = Launcher.createLauncher(client, MyServer::class, `in`, out)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, in2, out2)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, in2, out2)
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
         val fooFuture: CompletableFuture<MyParam> = clientSideLauncher.remoteProxy.askServer(MyParam("FOO"))
@@ -85,7 +86,7 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             ("Content-Length: 52$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"42\",\"result\":{\"value\":\"bar\"}}",
@@ -105,7 +106,7 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             """Content-Length: 50$CRLF$CRLF{"jsonrpc":"2.0","id":42,"result":{"value":"bar"}}""",
@@ -125,7 +126,7 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             (("Content-Length: 65$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":42,\"result\":{\"value\":\"foo\",\"either\":\"bar\"}}"),
@@ -145,7 +146,7 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             (("Content-Length: 50$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":42,\"result\":{\"value\":\"foo\"}}"),
@@ -168,8 +169,8 @@ class IntegrationTest {
                 throw UnsupportedOperationException("Unused by this test")
             }
         }
-        val clientSideLauncher: Launcher<MyVoidServer> = Launcher.createLauncher(
-            client, MyVoidServer::class.java, `in`, out
+        val clientSideLauncher: Launcher<MyClient, MyVoidServer> = Launcher.createLauncher(
+            client, MyVoidServer::class, `in`, out
         )
 
         // create server side
@@ -178,7 +179,7 @@ class IntegrationTest {
                 return CompletableFuture.completedFuture(param)
             }
         }
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, in2, out2)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, in2, out2)
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
 
@@ -220,11 +221,11 @@ class IntegrationTest {
                 }
             }
         }
-        val clientSideLauncher: Launcher<MyServer> = Launcher.createLauncher(client, MyServer::class.java, `in`, out)
+        val clientSideLauncher = Launcher.createLauncher(client, MyServer::class, `in`, out)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, in2, out2)
+        val serverSideLauncher = Launcher.createLauncher(server, MyClient::class, in2, out2)
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
         val future: CompletableFuture<MyParam> = serverSideLauncher.remoteProxy.askClient(MyParam("FOO"))
@@ -276,7 +277,7 @@ class IntegrationTest {
                 }
             }
         }
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             (("Content-Length: 132$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32800,\"message\":\"The request (id: 1, method: \\u0027askServer\\u0027) has been cancelled\"}}"),
@@ -287,7 +288,7 @@ class IntegrationTest {
     @Test
     @Throws(Exception::class)
     fun testVersatility() {
-        Logger.getLogger(RemoteEndpoint::class.java.name).level = Level.OFF
+        Logger.getLogger(RemoteEndpoint::class.jvmName).level = Level.OFF
         // create client side
         val `in` = PipedInputStream()
         val out = PipedOutputStream()
@@ -315,11 +316,11 @@ class IntegrationTest {
                 }
             }
         }
-        val clientSideLauncher: Launcher<MyServer> = Launcher.createLauncher(client, MyServer::class.java, `in`, out)
+        val clientSideLauncher = Launcher.createLauncher(client, MyServer::class, `in`, out)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, in2, out2)
+        val serverSideLauncher = Launcher.createLauncher(server, MyClient::class, in2, out2)
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
         val errorFuture1: CompletableFuture<MyParam> = serverSideLauncher.remoteProxy.askClient(MyParam("FOO"))
@@ -346,7 +347,7 @@ class IntegrationTest {
         // intercept log messages
         val logMessages = LogMessageAccumulator()
         try {
-            logMessages.registerTo(GenericEndpoint::class.java)
+            logMessages.registerTo(GenericEndpoint::class)
 
             // create client messages
             val clientMessage1 =
@@ -360,8 +361,8 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(
-                server, MyClient::class.java, `in`, out
+            val serverSideLauncher = Launcher.createLauncher(
+                server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
             logMessages.await(Level.WARNING, "Unsupported notification method: foo1")
@@ -381,7 +382,7 @@ class IntegrationTest {
         // intercept log messages
         val logMessages = LogMessageAccumulator()
         try {
-            logMessages.registerTo(GenericEndpoint::class.java)
+            logMessages.registerTo(GenericEndpoint::class)
 
             // create client messages
             val clientMessage1 =
@@ -395,8 +396,8 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(
-                server, MyClient::class.java, `in`, out
+            val serverSideLauncher = Launcher.createLauncher(
+                server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
             logMessages.await(Level.INFO, "Unsupported notification method: $/foo1")
@@ -421,7 +422,7 @@ class IntegrationTest {
         // intercept log messages
         val logMessages = LogMessageAccumulator()
         try {
-            logMessages.registerTo(GenericEndpoint::class.java)
+            logMessages.registerTo(GenericEndpoint::class)
 
             // create client messages
             val notificationMessage =
@@ -434,8 +435,8 @@ class IntegrationTest {
             val server: UnexpectedParamsTestServer = object : UnexpectedParamsTestServer {
                 override fun myNotification() {}
             }
-            val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(
-                server, MyClient::class.java, `in`, out
+            val serverSideLauncher = Launcher.createLauncher(
+                server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening()
             logMessages.await(
@@ -459,7 +460,7 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessages.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             ((("Content-Length: 214$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\"," + "\"data\":{\"message\":\"com.google.gson.stream.MalformedJsonException: Expected value at line 4 column 22 path $.params.value\"}}}" + "Content-Length: 51" + CRLF + CRLF).toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
@@ -473,7 +474,7 @@ class IntegrationTest {
         // intercept log messages
         val logMessages = LogMessageAccumulator()
         try {
-            logMessages.registerTo(StreamMessageProducer::class.java)
+            logMessages.registerTo(StreamMessageProducer::class)
             val requestMessage1 =
                 ("{\"jsonrpc\": \"2.0\",\n" + "\"params\": { \"value\": }\n" + "\"id\": \"1\",\n" + "\"method\":\"askServer\",\n" + "}")
             val requestMessage2 =
@@ -483,8 +484,8 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(
-                server, MyClient::class.java, `in`, out
+            val serverSideLauncher = Launcher.createLauncher(
+                server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
             logMessages.await(
@@ -512,7 +513,7 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessages.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             ((("Content-Length: 165$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\"," + "\"data\":{\"message\":\"Unterminated object at line 5 column 2 path $.params\"}}}" + "Content-Length: 51" + CRLF + CRLF).toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
@@ -532,7 +533,7 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessages.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(server, MyClient::class.java, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
             ((("Content-Length: 195$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\"," + "\"data\":{\"message\":\"Use JsonReader.setLenient(true) to accept malformed JSON at line 5 column 3 path $\"}}}" + "Content-Length: 51" + CRLF + CRLF).toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
@@ -552,8 +553,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessages.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(
-            server, MyClient::class.java, `in`, out
+        val serverSideLauncher = Launcher.createLauncher(
+            server, MyClient::class, `in`, out
         )
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(
@@ -571,8 +572,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessages.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyClient> = Launcher.createLauncher(
-            server, MyClient::class.java, `in`, out
+        val serverSideLauncher = Launcher.createLauncher(
+            server, MyClient::class, `in`, out
         )
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
         assertEquals(

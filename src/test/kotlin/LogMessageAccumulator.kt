@@ -6,13 +6,15 @@ import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger
 import java.util.stream.Collectors
+import kotlin.reflect.KClass
+import kotlin.reflect.jvm.jvmName
 
 
 class LogMessageAccumulator() : Handler() {
     private val records: MutableList<LogRecord> = ArrayList()
     private val registeredLoggers: MutableList<Logger> = ArrayList()
-    fun registerTo(clazz: Class<*>): Logger {
-        return registerTo(clazz.name)
+    fun registerTo(clazz: KClass<*>): Logger {
+        return registerTo(clazz.jvmName)
     }
 
     fun registerTo(name: String?): Logger {
@@ -40,7 +42,7 @@ class LogMessageAccumulator() : Handler() {
     fun findRecord(level: Level, message: String): LogRecord? {
         synchronized(records) {
             for (r: LogRecord in records) {
-                if ((level == r.level) && (message == r.getMessage())) return r
+                if ((level == r.level) && (message == r.message)) return r
             }
             return null
         }

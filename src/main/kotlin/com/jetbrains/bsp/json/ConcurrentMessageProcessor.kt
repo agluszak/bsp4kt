@@ -7,6 +7,7 @@ import java.io.IOException
 import java.util.concurrent.*
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.reflect.jvm.jvmName
 
 
 /**
@@ -89,7 +90,7 @@ open class ConcurrentMessageProcessor(messageProducer: MessageProducer, messageC
             }
         }
 
-        private val LOG = Logger.getLogger(ConcurrentMessageProcessor::class.java.name)
+        private val LOG = Logger.getLogger(ConcurrentMessageProcessor::class.jvmName)
     }
 }
 

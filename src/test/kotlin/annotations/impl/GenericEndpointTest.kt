@@ -10,18 +10,19 @@ import java.util.function.Predicate
 import java.util.logging.Level
 
 class GenericEndpointTest {
-    class Foo : MyIf, OtherThing {
+    class Foo : MyIf {
         var calls = 0
         override fun myNotification() {
             calls++
         }
 
-        override fun doDelegate(): OtherThing {
-            return this
+        override fun myOtherNotification() {
+            calls++
         }
+
     }
 
-    class Bar {
+    open class Bar {
         var calls = 0
 
         @JsonNotification
@@ -30,50 +31,56 @@ class GenericEndpointTest {
         }
     }
 
+    class FooBar : Bar(), MyIf {
+        var fooCalls = 0
+
+        override fun myNotification() {
+            fooCalls++
+        }
+
+        override fun myOtherNotification() {
+            fooCalls++
+        }
+
+    }
+
     interface MyIf {
         @JsonNotification
         fun myNotification()
 
-        @JsonDelegate
-        fun doDelegate(): OtherThing?
-    }
-
-    @JsonSegment("other")
-    interface OtherThing {
-        @JsonNotification
-        fun myNotification()
+        @JsonNotification("other/myNotification")
+        fun myOtherNotification()
     }
 
     @Test
     fun testSimple() {
         val foo = Foo()
         val endpoint = GenericEndpoint(foo)
-        endpoint.notify("myNotification", null)
-        endpoint.notify("other/myNotification", null)
+        endpoint.notify("myNotification", listOf())
+        endpoint.notify("other/myNotification", listOf())
         assertEquals(2, foo.calls)
     }
 
     @Test
     fun testMultiServices() {
-        val foo: Foo = Foo()
-        val bar: Bar = Bar()
-        val endpoint = GenericEndpoint(foo, bar)
-        endpoint.notify("myNotification", null)
-        endpoint.notify("barrr", null)
-        endpoint.notify("other/myNotification", null)
-        assertEquals(2, foo.calls)
-        assertEquals(1, bar.calls)
+        val foobar = FooBar()
+        val endpoint = GenericEndpoint(foobar)
+        endpoint.notify("myNotification", listOf())
+        endpoint.notify("barrr", listOf())
+        endpoint.notify("other/myNotification", listOf())
+        assertEquals(1, foobar.calls)
+        assertEquals(2, foobar.fooCalls)
     }
 
     @Test
     fun testUnexpectedParams() {
         val logMessages = LogMessageAccumulator()
         try {
-            logMessages.registerTo(GenericEndpoint::class.java)
+            logMessages.registerTo(GenericEndpoint::class)
             val foo: Foo = Foo()
             val endpoint = GenericEndpoint(foo)
             assertEquals(0, foo.calls)
-            endpoint.notify("myNotification", Any())
+            endpoint.notify("myNotification", listOf(Any()))
             assertEquals(1, foo.calls)
         } finally {
             logMessages.unregister()
@@ -83,13 +90,13 @@ class GenericEndpointTest {
     @Test
     @Throws(Exception::class)
     fun testZeroParams_01() {
-        testZeroParams("foo") { m: String -> m.contains("Unexpected params 'foo'") }
+        testZeroParams(listOf("foo")) { m: String -> m.contains("Unexpected params '[foo]'") }
     }
 
     @Test
     @Throws(Exception::class)
     fun testZeroParams_02() {
-        testZeroParams(null)
+        testZeroParams(listOf(null))
     }
 
     @Test
@@ -109,12 +116,12 @@ class GenericEndpointTest {
     }
 
     @Throws(Exception::class)
-     fun testZeroParams(params: Any?, predicate: Predicate<String>? = null) {
+     fun testZeroParams(params: List<Any?>, predicate: Predicate<String>? = null) {
         var logMessages: LogMessageAccumulator? = null
         try {
             if (predicate != null) {
                 logMessages = LogMessageAccumulator()
-                logMessages.registerTo(GenericEndpoint::class.java)
+                logMessages.registerTo(GenericEndpoint::class)
             }
             val endpoint = GenericEndpoint(object : Any() {
                 @JsonNotification
@@ -131,13 +138,13 @@ class GenericEndpointTest {
     @Test
     @Throws(Exception::class)
     fun testSingleParams_01() {
-        testSingleParams("foo", "foo")
+        testSingleParams(listOf("foo"), "foo")
     }
 
     @Test
     @Throws(Exception::class)
     fun testSingleParams_02() {
-        testSingleParams(null, null)
+        testSingleParams(listOf(null), null)
     }
 
     @Test
@@ -151,16 +158,16 @@ class GenericEndpointTest {
     fun testSingleParams_04() {
         testSingleParams(
             mutableListOf("foo", "bar"), "foo"
-        ) { m: String -> m.contains("Unexpected params 'bar'") }
+        ) { m: String -> m.contains("Unexpected params '[bar]'") }
     }
 
     @Throws(Exception::class)
-     fun testSingleParams(params: Any?, expectedString: String?, predicate: Predicate<String>? = null) {
+     fun testSingleParams(params: List<Any?>, expectedString: String?, predicate: Predicate<String>? = null) {
         var logMessages: LogMessageAccumulator? = null
         try {
             if (predicate != null) {
                 logMessages = LogMessageAccumulator()
-                logMessages.registerTo(GenericEndpoint::class.java)
+                logMessages.registerTo(GenericEndpoint::class)
             }
             val endpoint = GenericEndpoint(object : Any() {
                 @JsonRequest
@@ -193,24 +200,24 @@ class GenericEndpointTest {
     fun testMultiParams_03() {
         testMultiParams(
             mutableListOf("foo", 1, "bar", 2), "foo", 1
-        ) { m: String -> m.contains("Unexpected params 'bar', '2'") }
+        ) { m: String -> m.contains("Unexpected params '[bar, 2]'") }
     }
 
     @Test
     @Throws(Exception::class)
     fun testMultiParams_04() {
-        testMultiParams("foo", "foo", null)
+        testMultiParams(listOf("foo"), "foo", null)
     }
 
     @Throws(Exception::class)
      fun testMultiParams(
-        params: Any?, expectedString: String?, expectedInt: Int?, predicate: Predicate<String>? = null
+        params: List<Any?>, expectedString: String?, expectedInt: Int?, predicate: Predicate<String>? = null
     ) {
         var logMessages: LogMessageAccumulator? = null
         try {
             if (predicate != null) {
                 logMessages = LogMessageAccumulator()
-                logMessages.registerTo(GenericEndpoint::class.java)
+                logMessages.registerTo(GenericEndpoint::class)
             }
             val endpoint = GenericEndpoint(object : Any() {
                 var stringValue: String? = null
@@ -235,8 +242,8 @@ class GenericEndpointTest {
             endpoint.notify("myNotification", params)
             logMessages?.await { r -> Level.WARNING === r.level && predicate?.test(r.message) == true }
 
-            assertEquals(expectedString, endpoint.request("getStringValue", null).get())
-            assertEquals(expectedInt, endpoint.request("getIntValue", null).get())
+            assertEquals(expectedString, endpoint.request("getStringValue", listOf(null)).get())
+            assertEquals(expectedInt, endpoint.request("getIntValue", listOf(null)).get())
         } finally {
             logMessages?.unregister()
         }

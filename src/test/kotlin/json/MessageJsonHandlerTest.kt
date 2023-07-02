@@ -336,9 +336,10 @@ class MessageJsonHandlerTest() {
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
-        assertEquals(Location::class.java, message.params!!.javaClass)
+        assertTrue(message.params[0] is Location)
     }
 
+    // Arguments can be in any order
     @Test
     fun testParamsParsing_02() {
         val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
@@ -355,9 +356,10 @@ class MessageJsonHandlerTest() {
                     + "\"params\": {\"uri\": \"dummy://mymodel.mydsl\"}\n"
                     + "}")
         ) as RequestMessage
-        assertEquals(Location::class.java, message.params!!.javaClass)
+        assertTrue(message.params[0] is Location)
     }
 
+    // Parameters are parsed as JsonObject if the method is not known
     @Test
     fun testParamsParsing_03() {
         val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
@@ -374,7 +376,7 @@ class MessageJsonHandlerTest() {
                     + "\"params\": {\"uri\": \"dummy://mymodel.mydsl\"}\n"
                     + "}")
         ) as RequestMessage
-        assertEquals(JsonObject::class.java, message.params!!.javaClass)
+        assertTrue(message.params[0] is JsonObject)
     }
 
     @Test
@@ -413,11 +415,10 @@ class MessageJsonHandlerTest() {
                     + "\"params\": [\"foo\", 2]\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>)
-        val parameters = message.params as List<*>
-        assertEquals(2, parameters.size)
-        assertEquals("foo", parameters[0])
-        assertEquals(2, parameters[1])
+        
+        assertEquals(2, message.params.size)
+        assertEquals("foo", message.params[0])
+        assertEquals(2, message.params[1])
     }
 
     @Test
@@ -458,12 +459,11 @@ class MessageJsonHandlerTest() {
                     + "\"params\": [[\"foo\", \"bar\"], [1, 2], {\"uri\": \"dummy://mymodel.mydsl\"}]\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>)
-        val parameters = message.params as List<*>
-        assertEquals(3, parameters.size)
-        assertEquals("[foo, bar]", parameters[0].toString())
-        assertEquals("[1, 2]", parameters[1].toString())
-        assertTrue(parameters[2] is Location)
+        
+        assertEquals(3, message.params.size)
+        assertEquals("[foo, bar]", message.params[0].toString())
+        assertEquals("[1, 2]", message.params[1].toString())
+        assertTrue(message.params[2] is Location)
     }
 
     @Test
@@ -484,12 +484,11 @@ class MessageJsonHandlerTest() {
                     + "\"params\": [[\"foo\", \"bar\"], [1, 2]]\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>)
-        val parameters = message.params as List<*>
-        assertEquals(3, parameters.size)
-        assertEquals("[foo, bar]", parameters[0].toString())
-        assertEquals("[1, 2]", parameters[1].toString())
-        assertNull(parameters[2])
+        
+        assertEquals(3, message.params.size)
+        assertEquals("[foo, bar]", message.params[0].toString())
+        assertEquals("[1, 2]", message.params[1].toString())
+        assertNull(message.params[2])
     }
 
     @Test
@@ -509,11 +508,10 @@ class MessageJsonHandlerTest() {
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>)
-        val parameters = message.params as List<*>
-        assertEquals(2, parameters.size)
-        assertEquals("foo", parameters[0])
-        assertEquals(2, parameters[1])
+        
+        assertEquals(2, message.params.size)
+        assertEquals("foo", message.params[0])
+        assertEquals(2, message.params[1])
     }
 
     @Test
@@ -554,12 +552,11 @@ class MessageJsonHandlerTest() {
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>)
-        val parameters = message.params as List<*>
-        assertEquals(3, parameters.size)
-        assertEquals("[foo, bar]", parameters[0].toString())
-        assertEquals("[1, 2]", parameters[1].toString())
-        assertTrue(parameters[2] is Location)
+        
+        assertEquals(3, message.params.size)
+        assertEquals("[foo, bar]", message.params[0].toString())
+        assertEquals("[1, 2]", message.params[1].toString())
+        assertTrue(message.params[2] is Location)
     }
 
     @Test
@@ -580,12 +577,11 @@ class MessageJsonHandlerTest() {
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>)
-        val parameters = message.params as List<*>
-        assertEquals(3, parameters.size)
-        assertEquals("[foo, bar]", parameters[0].toString())
-        assertEquals("[1, 2]", parameters[1].toString())
-        assertNull(parameters[2])
+        
+        assertEquals(3, message.params.size)
+        assertEquals("[foo, bar]", message.params[0].toString())
+        assertEquals("[1, 2]", message.params[1].toString())
+        assertNull(message.params[2])
     }
 
     @Test
@@ -604,11 +600,10 @@ class MessageJsonHandlerTest() {
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>)
-        val parameters = message.params as List<*>
+        
         assertEquals(
-            Arrays.asList(MyEnum.A, MyEnum.B, MyEnum.C),
-            parameters
+            listOf(MyEnum.A, MyEnum.B, MyEnum.C),
+            message.params
         )
     }
 
@@ -628,11 +623,9 @@ class MessageJsonHandlerTest() {
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
-        assertTrue(message.params is List<*>, message.params!!.javaClass.toString())
-        val parameters = message.params as List<*>
         assertEquals(
             listOf(MyEnum.A, MyEnum.B, null),
-            parameters
+            message.params
         )
     }
 
@@ -831,7 +824,7 @@ class MessageJsonHandlerTest() {
             typeOf<String>(),
             typeOf<String>()
         )
-        val request = RequestMessage(1.left(), handler.methodProvider!!.resolveMethod(null)!!, "param")
+        val request = RequestMessage(1.left(), handler.methodProvider!!.resolveMethod(null)!!, listOf("param"))
 
         // check primitive was wrapped into array
         assertEquals(
@@ -856,14 +849,14 @@ class MessageJsonHandlerTest() {
                 + "}")
         // Check parse - unwrap primitive
         val message: RequestMessage = handler.parseMessage(request) as RequestMessage
-        assertEquals("param", message.params)
+        assertEquals(listOf("param"), message.params)
     }
 
     @Test
     fun testWrapArray_JsonRpc2_0() {
         val handler: MessageJsonHandler =
             createSimpleRequestHandler(typeOf<String>(), typeOf<List<Boolean>>())
-        val request = RequestMessage(1.left(), handler.methodProvider!!.resolveMethod(null)!!, listOf(true, false))
+        val request = RequestMessage(1.left(), handler.methodProvider!!.resolveMethod(null)!!, listOf(listOf(true, false)))
 
         // check primitive was wrapped into array
         assertEquals(
@@ -889,7 +882,7 @@ class MessageJsonHandlerTest() {
         val message: RequestMessage = handler.parseMessage(request) as RequestMessage
 
         // Check parse - unwrap array
-        assertEquals(listOf(true, false), message.params)
+        assertEquals(listOf(listOf(true, false)), message.params)
     }
 
     @Test

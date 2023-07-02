@@ -19,13 +19,13 @@ class RemoteEndpointTest {
         var notifications: MutableList<NotificationMessage> = ArrayList<NotificationMessage>()
         var requests: MutableMap<RequestMessage, CompletableFuture<Any?>> = LinkedHashMap()
 
-        override fun notify(method: String, parameter: Any?) {
-            notifications.add(NotificationMessage(method, parameter))
+        override fun notify(method: String, params: List<Any?>) {
+            notifications.add(NotificationMessage(method, params))
         }
 
-        override fun request(method: String, parameter: Any?): CompletableFuture<Any?> {
+        override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
             val completableFuture = CompletableFuture<Any?>()
-            requests[RequestMessage("asd".right(), method, parameter)] = completableFuture
+            requests[RequestMessage("asd".right(), method, params)] = completableFuture
             return completableFuture
         }
     }
@@ -42,10 +42,10 @@ class RemoteEndpointTest {
         val endp = TestEndpoint()
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp)
-        endpoint.consume(NotificationMessage("foo", "myparam"))
+        endpoint.consume(NotificationMessage("foo", listOf("myparam")))
         val notificationMessage: NotificationMessage = endp.notifications[0]
         assertEquals("foo", notificationMessage.method)
-        assertEquals("myparam", notificationMessage.params)
+        assertEquals("myparam", notificationMessage.params[0])
         assertTrue(consumer.messages.isEmpty())
     }
 
@@ -54,11 +54,11 @@ class RemoteEndpointTest {
         val endp = TestEndpoint()
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp)
-        endpoint.consume(RequestMessage("1".right(), "foo", "myparam"))
+        endpoint.consume(RequestMessage("1".right(), "foo", listOf("myparam")))
         val (key, value) = endp.requests.entries.iterator().next()
         value.complete("success")
         assertEquals("foo", key.method)
-        assertEquals("myparam", key.params)
+        assertEquals("myparam", key.params[0])
         val responseMessage: ResponseMessage = consumer.messages[0] as ResponseMessage
         assertEquals("success", responseMessage.result)
         assertEquals("1".right(), responseMessage.id)
@@ -69,11 +69,11 @@ class RemoteEndpointTest {
         val endp = TestEndpoint()
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp)
-        endpoint.consume(RequestMessage(1.left(), "foo", "myparam"))
+        endpoint.consume(RequestMessage(1.left(), "foo", listOf("myparam")))
         val (key, value) = endp.requests.entries.iterator().next()
         value.complete("success")
         assertEquals("foo", key.method)
-        assertEquals("myparam", key.params)
+        assertEquals("myparam", key.params[0])
         val responseMessage: ResponseMessage = consumer.messages[0] as ResponseMessage
         assertEquals("success", responseMessage.result)
         assertEquals(1.left(), responseMessage.id)
@@ -84,7 +84,7 @@ class RemoteEndpointTest {
         val endp = TestEndpoint()
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp)
-        endpoint.handle(RequestMessage("1".right(), "foo", "myparam"), listOf(MessageIssue("bar")))
+        endpoint.handle(RequestMessage("1".right(), "foo", listOf("myparam")), listOf(MessageIssue("bar")))
         val responseMessage: ResponseMessage = consumer.messages[0] as ResponseMessage
         assertNotNull(responseMessage.error)
         assertEquals("bar", responseMessage.error!!.message)
@@ -95,7 +95,7 @@ class RemoteEndpointTest {
         val endp = TestEndpoint()
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp)
-        endpoint.consume(RequestMessage("1".right(), "foo", "myparam"))
+        endpoint.consume(RequestMessage("1".right(), "foo", listOf("myparam")))
         val (_, value) = endp.requests.entries.iterator().next()
         value.cancel(true)
         val message: ResponseMessage = consumer.messages[0] as ResponseMessage
@@ -110,15 +110,15 @@ class RemoteEndpointTest {
         val logMessages = LogMessageAccumulator()
         try {
             // Don't show the exception in the test execution log
-            logMessages.registerTo(RemoteEndpoint::class.java)
+            logMessages.registerTo(RemoteEndpoint::class)
             val endp: TestEndpoint = object : TestEndpoint() {
-                override fun request(method: String, parameter: Any?): CompletableFuture<Any?> {
+                override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
                     throw RuntimeException("BAAZ")
                 }
             }
             val consumer = TestMessageConsumer()
             val endpoint = RemoteEndpoint(consumer, endp)
-            endpoint.consume(RequestMessage("1".right(), "foo", "myparam"))
+            endpoint.consume(RequestMessage("1".right(), "foo", listOf("myparam")))
             val response: ResponseMessage = consumer.messages[0] as ResponseMessage
             val error = response.error!!
             assertEquals("Internal error.", error.message)
@@ -136,7 +136,7 @@ class RemoteEndpointTest {
         val endp = TestEndpoint()
         val consumer = MessageConsumer { message -> throw RuntimeException("BAAZ") }
         val endpoint = RemoteEndpoint(consumer, endp)
-        val future: CompletableFuture<Any?> = endpoint.request("foo", "myparam")
+        val future: CompletableFuture<Any?> = endpoint.request("foo", listOf("myparam"))
         future.whenComplete { result: Any?, exception: Throwable ->
             assertNull(result)
             assertNotNull(exception)
@@ -156,7 +156,7 @@ class RemoteEndpointTest {
         val endp = TestEndpoint()
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp)
-        val future: CompletableFuture<Any?> = endpoint.request("foo", "myparam")
+        val future: CompletableFuture<Any?> = endpoint.request("foo", listOf("myparam"))
         val chained = future.thenAccept { _ ->
             throw RuntimeException(
                 "BAAZ"
@@ -176,12 +176,12 @@ class RemoteEndpointTest {
     fun testExceptionInOutputStream() {
         val logMessages = LogMessageAccumulator()
         try {
-            logMessages.registerTo(RemoteEndpoint::class.java)
+            logMessages.registerTo(RemoteEndpoint::class)
             val endp = TestEndpoint()
             val consumer: MessageConsumer =
                 MessageConsumer { throw JsonRpcException(SocketException("Permission denied: connect")) }
             val endpoint = RemoteEndpoint(consumer, endp)
-            endpoint.notify("foo", null)
+            endpoint.notify("foo", listOf(null))
             logMessages.await(Level.WARNING, "Failed to send notification message.")
         } finally {
             logMessages.unregister()
@@ -193,11 +193,11 @@ class RemoteEndpointTest {
     fun testOutputStreamClosed() {
         val logMessages = LogMessageAccumulator()
         try {
-            logMessages.registerTo(RemoteEndpoint::class.java)
+            logMessages.registerTo(RemoteEndpoint::class)
             val endp = TestEndpoint()
             val consumer: MessageConsumer = MessageConsumer { throw JsonRpcException(SocketException("Socket closed")) }
             val endpoint = RemoteEndpoint(consumer, endp)
-            endpoint.notify("foo", null)
+            endpoint.notify("foo", listOf(null))
             logMessages.await(Level.INFO, "Failed to send notification message.")
         } finally {
             logMessages.unregister()
@@ -214,7 +214,7 @@ class RemoteEndpointTest {
 //            // Don't show the exception in the test execution log
 //            logMessages.registerTo(RemoteEndpoint::class.java)
 //            val endp: TestEndpoint = object : TestEndpoint() {
-//                override fun request(method: String, parameter: Any?): CompletableFuture<Any?> {
+//                override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
 //                    throw RuntimeException("BAAZ")
 //                }
 //            }
@@ -253,7 +253,7 @@ class RemoteEndpointTest {
 //            // Don't show the exception in the test execution log
 //            logMessages.registerTo(RemoteEndpoint::class.java)
 //            val endp: TestEndpoint = object : TestEndpoint() {
-//                override fun request(method: String, parameter: Any?): CompletableFuture<Any?> {
+//                override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
 //                    return CompletableFuture.supplyAsync { "baz" }
 //                }
 //            }

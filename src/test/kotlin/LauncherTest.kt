@@ -39,9 +39,9 @@ class LauncherTest() {
         val a: A = object : A {
             override fun say(p: Param) {}
         }
-        val launcher: Launcher<A> = Launcher.createLauncher(
+        val launcher = Launcher.createLauncher(
             a,
-            A::class.java, ByteArrayInputStream("".toByteArray()), ByteArrayOutputStream()
+            A::class, ByteArrayInputStream("".toByteArray()), ByteArrayOutputStream()
         )
         val startListening: Future<*> = launcher.startListening()
         startListening[TIMEOUT, TimeUnit.MILLISECONDS]
@@ -55,7 +55,7 @@ class LauncherTest() {
         val a: A = object : A {
             override fun say(p: Param) {}
         }
-        val launcher: Launcher<A> = Launcher.createLauncher(a, A::class.java, object : InputStream() {
+        val launcher = Launcher.createLauncher(a, A::class, object : InputStream() {
             @Throws(IOException::class)
             override fun read(): Int {
                 try {

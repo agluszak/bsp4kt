@@ -12,16 +12,13 @@ import kotlin.reflect.KClass
  * A Proxy that wraps an [Endpoint] in one or more service interfaces, i.e. interfaces
  * containing [JsonNotification] and [JsonRequest] methods.
  */
-class EndpointProxy(private val delegate: Endpoint, interfaces: Collection<KClass<*>>) : InvocationHandler {
-    private var object_equals: Method? = null
-    private var object_hashCode: Method? = null
-    private var object_toString: Method? = null
+class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterface: KClass<Remote>) : InvocationHandler {
+    private val object_equals: Method
+    private val object_hashCode: Method
+    private val object_toString: Method
     private val methodInfos: LinkedHashMap<String, AnnotationUtil.MethodInfo>
 
-    constructor(delegate: Endpoint, interface_: KClass<*>) : this(delegate, listOf<KClass<*>>(interface_))
-
     init {
-        require(!interfaces.isEmpty()) { "interfaces must not be empty." }
         try {
             object_equals = Any::class.java.getDeclaredMethod("equals", Any::class.java)
             object_hashCode = Any::class.java.getDeclaredMethod("hashCode")
@@ -32,14 +29,12 @@ class EndpointProxy(private val delegate: Endpoint, interfaces: Collection<KClas
             throw RuntimeException(exception)
         }
         methodInfos = LinkedHashMap<String, AnnotationUtil.MethodInfo>()
-        for (interf in interfaces) {
-            AnnotationUtil.findRpcMethods(interf, HashSet()) { methodInfo ->
-                check(
-                    methodInfos.put(
-                        methodInfo.method.name, methodInfo
-                    ) == null
-                ) { "Duplicate RPC method " + methodInfo.method }
-            }
+        AnnotationUtil.findRpcMethods(remoteInterface, HashSet()) { methodInfo ->
+            check(
+                methodInfos.put(
+                    methodInfo.method.name, methodInfo
+                ) == null
+            ) { "Duplicate RPC method " + methodInfo.method }
         }
     }
 

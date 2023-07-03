@@ -2,8 +2,12 @@ package com.jetbrains.bsp.messages
 
 /**
  * A number indicating the error type that occurred.
+ * [-32099..-32000]: JSON-RPC reserved error codes
+ * [-32899..-32800]: LSP reserved error codes
  */
 enum class ResponseErrorCode(val value: Int) {
+
+
     /**
      * Invalid JSON was received by the server. An error occurred on
      * the server while parsing the JSON text.
@@ -31,41 +35,12 @@ enum class ResponseErrorCode(val value: Int) {
     InternalError(-32603),
 
     /**
-     * This is the start range of JSON RPC reserved error codes.
-     * It doesn't denote a real error code. No LSP error codes should
-     * be defined between the start and end range. For backwards
-     * compatibility the [.ServerNotInitialized] and the
-     * [.UnknownErrorCode] are left in the range.
-     *
-     *
-     * Since 3.16.0
-     */
-    jsonrpcReservedErrorRangeStart(-32099),
-
-    /**
      * Error code indicating that a server received a notification or
      * request before the server has received the `initialize` request.
      */
     ServerNotInitialized(-32002),
     UnknownErrorCode(-32001),
 
-    /**
-     * This is the end range of JSON RPC reserved error codes.
-     * It doesn't denote a real error code.
-     *
-     *
-     * Since 3.16.0
-     */
-    jsonrpcReservedErrorRangeEnd(-32000),
-
-    /**
-     * This is the start range of LSP reserved error codes.
-     * It doesn't denote a real error code.
-     *
-     *
-     * Since 3.16.0
-     */
-    lspReservedErrorRangeStart(-32899),
 
     /**
      * A request failed but it was syntactically correct, e.g the
@@ -106,14 +81,5 @@ enum class ResponseErrorCode(val value: Int) {
      * the cancel.
      */
     RequestCancelled(-32800),
-
-    /**
-     * This is the end range of LSP reserved error codes.
-     * It doesn't denote a real error code.
-     *
-     *
-     * Since 3.16.0
-     */
-    lspReservedErrorRangeEnd(-32800)
 
 }

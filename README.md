@@ -1,6 +1,8 @@
 # bazel/bsp4kt
 
-
+Based on [eclipse/lsp4j](https://github.com/eclipse-lsp4j/lsp4j),
+[rhdunn/xqt-kotlinx-json-rpc](https://github.com/rhdunn/xqt-kotlinx-json-rpc/),
+and [rust-analyzer/lsp-server](https://github.com/rust-lang/rust-analyzer/tree/master/lib/lsp-server)
 
 ## Getting Started
 

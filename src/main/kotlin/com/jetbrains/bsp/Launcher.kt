@@ -52,7 +52,7 @@ interface Launcher<Local, Remote> {
         /**
          * Create the JSON handler for messages between the local and remote services.
          */
-        protected fun createJsonHandler(): MessageJsonHandler {
+        private fun createJsonHandler(): MessageJsonHandler {
             return MessageJsonHandler(
                 json,
                 supportedMethods)
@@ -61,7 +61,7 @@ interface Launcher<Local, Remote> {
         /**
          * Create the remote endpoint that communicates with the local services.
          */
-        protected fun createRemoteEndpoint(jsonHandler: MessageJsonHandler): RemoteEndpoint {
+        private fun createRemoteEndpoint(jsonHandler: MessageJsonHandler): RemoteEndpoint {
             val outgoingMessageStream: MessageConsumer = StreamMessageConsumer(output, jsonHandler)
             val localEndpoint: Endpoint = ServiceEndpoints.toEndpoint(localService)
             val remoteEndpoint = RemoteEndpoint(outgoingMessageStream, localEndpoint, exceptionHandler)
@@ -72,7 +72,7 @@ interface Launcher<Local, Remote> {
         /**
          * Create the proxy for calling methods on the remote service.
          */
-        protected fun createProxy(remoteEndpoint: RemoteEndpoint): Remote {
+        private fun createProxy(remoteEndpoint: RemoteEndpoint): Remote {
             return ServiceEndpoints.toServiceObject(remoteEndpoint, remoteInterface)
         }
 

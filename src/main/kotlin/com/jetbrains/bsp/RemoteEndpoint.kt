@@ -46,8 +46,8 @@ class RemoteEndpoint(
     /**
      * Send a notification to the remote endpoint.
      */
-    override fun notify(method: String, params: List<Any?>) {
-        val notificationMessage: NotificationMessage = NotificationMessage(method, params)
+    override fun notify(method: String, params: JsonParams?) {
+        val notificationMessage = NotificationMessage(method, params)
         try {
             out.consume(notificationMessage)
         } catch (exception: Exception) {
@@ -59,7 +59,7 @@ class RemoteEndpoint(
     /**
      * Send a request to the remote endpoint.
      */
-    override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
+    override fun request(method: String, params: JsonParams?): CompletableFuture<Any?> {
         val requestMessage: RequestMessage = createRequestMessage(method, params)
         val result: CompletableFuture<Any?> = object : CompletableFuture<Any?>() {
             override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
@@ -84,7 +84,7 @@ class RemoteEndpoint(
         return result
     }
 
-    protected fun createRequestMessage(method: String, params: List<Any?>): RequestMessage {
+    protected fun createRequestMessage(method: String, params: JsonParams?): RequestMessage {
         val id = nextRequestId.incrementAndGet().left()
         return RequestMessage(id, method, params)
     }
@@ -100,22 +100,13 @@ class RemoteEndpoint(
     override fun consume(message: Message) {
         when (message) {
             is NotificationMessage -> {
-                val notificationMessage: NotificationMessage = message as NotificationMessage
-                handleNotification(notificationMessage)
+                handleNotification(message)
             }
-
             is RequestMessage -> {
-                val requestMessage: RequestMessage = message as RequestMessage
-                handleRequest(requestMessage)
+                handleRequest(message)
             }
-
             is ResponseMessage -> {
-                val responseMessage: ResponseMessage = message as ResponseMessage
-                handleResponse(responseMessage)
-            }
-
-            else -> {
-                LOG.log(Level.WARNING, "Unkown message type.", message)
+                handleResponse(message)
             }
         }
     }

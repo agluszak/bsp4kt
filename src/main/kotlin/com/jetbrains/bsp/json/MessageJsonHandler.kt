@@ -23,30 +23,12 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
         return null
     }
 
-    fun parseMessage(input: CharSequence): Message {
-        val stream = input.toString().byteInputStream()
-        return parseMessage(stream)
+    fun parseMessage(input: String): Message {
+        val jsonElement = json.parseToJsonElement(input)
+        return Message.deserialize(jsonElement)
     }
 
-    @OptIn(ExperimentalSerializationApi::class)
-    fun parseMessage(input: InputStream): Message {
-//        try {
-            val message: Message = json.decodeFromStream(input)
-            // TODO: check input.available()
-            return message
-//        }
-//        catch (e: SerializationException) {
-//            val issue = MessageIssue("Message could not be parsed.", ResponseErrorCode.ParseError.value, e)
-//            throw MessageIssueException(message, listOf(issue))
-//        } catch (e: IllegalArgumentException) {
-//
-//        } catch (e: IOException)
-//        val jsonReader = JsonReader(input)
-//        val message: Message = gson.fromJson(jsonReader, Message::class.java)
-//        return message
-    }
-
-    fun serialize(message: Message): String = json.encodeToString(message)
+    fun serialize(message: Message): String = json.encodeToString(message.serializeToJson())
 
 
     companion object {

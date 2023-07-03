@@ -22,20 +22,6 @@ object ServiceEndpoints {
     }
 
     /**
-     * Wraps a given [Endpoint] in the given service interfaces.
-     *
-     * @return the wrapped service object
-     */
-    fun toServiceObject(endpoint: Endpoint, interfaces: Collection<KClass<*>>, classLoader: ClassLoader): Any {
-        val interfacesWithEndpoint = interfaces.toMutableList()
-        interfacesWithEndpoint.add(Endpoint::class)
-        val interfacesAsJava = interfacesWithEndpoint.map { it.java }
-        val interfArray = interfacesAsJava.toTypedArray()
-        val invocationHandler = EndpointProxy(endpoint, interfacesWithEndpoint)
-        return Proxy.newProxyInstance(classLoader, interfArray, invocationHandler)
-    }
-
-    /**
      * Wraps a given object with service annotations behind an [Endpoint] interface.
      *
      * @return the wrapped service endpoint

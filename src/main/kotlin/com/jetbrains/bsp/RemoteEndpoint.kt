@@ -1,9 +1,9 @@
 package com.jetbrains.bsp
 
-import arrow.core.left
 import com.jetbrains.bsp.json.MessageJsonHandler
 import com.jetbrains.bsp.json.MethodProvider
 import com.jetbrains.bsp.messages.*
+import kotlinx.serialization.json.JsonPrimitive
 import java.io.ByteArrayOutputStream
 import java.io.PrintWriter
 import java.lang.reflect.InvocationTargetException
@@ -28,6 +28,7 @@ import kotlin.reflect.jvm.jvmName
 class RemoteEndpoint(
     private val out: MessageConsumer,
     private val localEndpoint: Endpoint,
+    private val jsonHandler: MessageJsonHandler,
     private val exceptionHandler: Function<Throwable, ResponseError> = DEFAULT_EXCEPTION_HANDLER
 ) :
     Endpoint, MessageConsumer, MessageIssueHandler, MethodProvider {
@@ -46,8 +47,9 @@ class RemoteEndpoint(
     /**
      * Send a notification to the remote endpoint.
      */
-    override fun notify(method: String, params: JsonParams?) {
-        val notificationMessage = NotificationMessage(method, params)
+    override fun notify(method: String, params: List<Any?>) {
+        val serializedParams = jsonHandler.serializeParams(method, params)
+        val notificationMessage = NotificationMessage(method, serializedParams)
         try {
             out.consume(notificationMessage)
         } catch (exception: Exception) {
@@ -59,8 +61,9 @@ class RemoteEndpoint(
     /**
      * Send a request to the remote endpoint.
      */
-    override fun request(method: String, params: JsonParams?): CompletableFuture<Any?> {
-        val requestMessage: RequestMessage = createRequestMessage(method, params)
+    override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
+        val serializedParams = jsonHandler.serializeParams(method, params)
+        val requestMessage: RequestMessage = createRequestMessage(method, serializedParams)
         val result: CompletableFuture<Any?> = object : CompletableFuture<Any?>() {
             override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
                 sendCancelNotification(requestMessage.id)
@@ -84,12 +87,13 @@ class RemoteEndpoint(
         return result
     }
 
-    protected fun createRequestMessage(method: String, params: JsonParams?): RequestMessage {
-        val id = nextRequestId.incrementAndGet().left()
+    private fun createRequestMessage(method: String, params: JsonParams?): RequestMessage {
+        val idRaw = nextRequestId.incrementAndGet()
+        val id = MessageId.NumberId(idRaw)
         return RequestMessage(id, method, params)
     }
 
-    protected fun sendCancelNotification(id: MessageId?) {
+    private fun sendCancelNotification(id: MessageId?) {
         if (id == null) {
             return
         }
@@ -102,16 +106,18 @@ class RemoteEndpoint(
             is NotificationMessage -> {
                 handleNotification(message)
             }
+
             is RequestMessage -> {
                 handleRequest(message)
             }
+
             is ResponseMessage -> {
                 handleResponse(message)
             }
         }
     }
 
-    protected fun handleResponse(responseMessage: ResponseMessage) {
+    private fun handleResponse(responseMessage: ResponseMessage) {
         var requestInfo: PendingRequestInfo?
         synchronized(sentRequestMap) { requestInfo = sentRequestMap.remove(responseMessage.id) }
         if (requestInfo == null) {
@@ -120,21 +126,24 @@ class RemoteEndpoint(
                 Level.WARNING,
                 "Unmatched response message: $responseMessage"
             )
-        } else if (responseMessage.error != null) {
-            // The remote service has replied with an error
-            requestInfo!!.future.completeExceptionally(ResponseErrorException(responseMessage.error))
-        } else {
-            // The remote service has replied with a result object
-            requestInfo!!.future.complete(responseMessage.result)
+        } else when (responseMessage) {
+            is ResponseMessage.Error ->
+                // The remote service has replied with an error
+                requestInfo!!.future.completeExceptionally(ResponseErrorException(responseMessage.error))
+
+            is ResponseMessage.Result ->
+                // The remote service has replied with a result object
+                requestInfo!!.future.complete(responseMessage.result)
         }
     }
 
-    protected fun handleNotification(notificationMessage: NotificationMessage) {
-        if (!handleCancellation(notificationMessage)) {
+    private fun handleNotification(notificationMessage: NotificationMessage) {
+        val params = jsonHandler.deserializeParams(notificationMessage.method, notificationMessage.params)
+        if (!handleCancellation(notificationMessage, params)) {
             // Forward the notification to the local endpoint
             try {
-                localEndpoint.notify(notificationMessage.method, notificationMessage.params)
-            } catch (exception: Exception) {
+                localEndpoint.notify(notificationMessage.method, params)
+            } catch (exception: Exception) { // TODO: error handling
                 LOG.log(
                     Level.WARNING,
                     "Notification threw an exception: $notificationMessage", exception
@@ -149,13 +158,13 @@ class RemoteEndpoint(
      * @return `true` if the given message is a cancellation notification,
      * `false` if it can be handled by the local endpoint
      */
-    protected fun handleCancellation(notificationMessage: NotificationMessage): Boolean {
+    private fun handleCancellation(notificationMessage: NotificationMessage, cancelParams: List<Any?>): Boolean {
         if (MessageJsonHandler.CANCEL_METHOD.methodName == notificationMessage.method) {
-            val cancelParams = notificationMessage.params[0]
-            if (cancelParams != null) {
-                if (cancelParams is CancelParams) {
+            val cancelParam = cancelParams[0]
+            if (cancelParam != null) {
+                if (cancelParam is CancelParams) {
                     synchronized(receivedRequestMap) {
-                        val id = cancelParams.id
+                        val id = cancelParam.id
                         val future = receivedRequestMap[id]
                         future?.cancel(true) ?: LOG.warning("Unmatched cancel notification for request id $id")
                     }
@@ -170,47 +179,39 @@ class RemoteEndpoint(
         return false
     }
 
-    protected fun handleRequest(requestMessage: RequestMessage) {
+    private fun handleRequest(requestMessage: RequestMessage) {
+        val messageId = requestMessage.id
+        val params = jsonHandler.deserializeParams(requestMessage.method, requestMessage.params)
         val future: CompletableFuture<*>
         try {
             // Forward the request to the local endpoint
-            future = localEndpoint.request(requestMessage.method, requestMessage.params)
-        } catch (throwable: Throwable) {
+            future = localEndpoint.request(requestMessage.method, params)
+        } catch (throwable: Throwable) { // TODO error handling
             // The local endpoint has failed handling the request - reply with an error response
-            var errorObject: ResponseError = exceptionHandler.apply(throwable)
-            if (errorObject == null) {
-                errorObject =
-                    fallbackResponseError("Internal error. Exception handler provided no error object", throwable)
-            }
-            out.consume(createErrorResponseMessage(requestMessage, errorObject))
+            val errorObject: ResponseError = exceptionHandler.apply(throwable)
+            out.consume(ResponseMessage.Error(messageId, errorObject))
             if (throwable is Error) throw throwable else return
         }
-        val messageId = requestMessage.id
+
         synchronized(receivedRequestMap) { receivedRequestMap.put(messageId, future) }
         future.thenAccept { result: Any? ->
+            val serializedResult = jsonHandler.serializeResult(requestMessage.method, result)
             // Reply with the result object that was computed by the local endpoint
-            out.consume(createResultResponseMessage(requestMessage, result))
+            out.consume(ResponseMessage.Result(messageId, serializedResult))
         }.exceptionally { t: Throwable ->
             // The local endpoint has failed computing a result - reply with an error response
-            val responseMessage: ResponseMessage
-            if (isCancellation(t)) {
+            val responseMessage = if (isCancellation(t)) {
                 val message =
                     "The request (id: " + messageId + ", method: '" + requestMessage.method + "') has been cancelled"
                 val errorObject = ResponseError(ResponseErrorCode.RequestCancelled.value, message, null)
-                responseMessage = createErrorResponseMessage(requestMessage, errorObject)
+                ResponseMessage.Error(messageId, errorObject)
             } else {
-                var errorObject: ResponseError = exceptionHandler.apply(t)
-                if (errorObject == null) {
-                    errorObject = fallbackResponseError(
-                        "Internal error. Exception handler provided no error object",
-                        t
-                    )
-                }
-                responseMessage = createErrorResponseMessage(requestMessage, errorObject)
+                val errorObject: ResponseError = exceptionHandler.apply(t)
+                ResponseMessage.Error(messageId, errorObject)
             }
             out.consume(responseMessage)
             null
-        }.thenApply<Any?> { obj: Void? ->
+        }.thenApply<Any?> {
             synchronized(receivedRequestMap) { receivedRequestMap.remove(messageId) }
             null
         }
@@ -233,26 +234,29 @@ class RemoteEndpoint(
         }
     }
 
-    protected fun logIssues(message: Message, issues: List<MessageIssue>) {
+    private fun logIssues(message: Message, issues: List<MessageIssue>) {
         for (issue in issues) {
             val logMessage = "Issue found in " + message.javaClass.simpleName + ": " + issue.text
             LOG.log(Level.WARNING, logMessage, issue.cause)
         }
     }
 
-    protected fun handleRequestIssues(requestMessage: RequestMessage, issues: List<MessageIssue>) {
+    private fun handleRequestIssues(requestMessage: RequestMessage, issues: List<MessageIssue>) {
+        val requestId = requestMessage.id
         val errorObject =
-        if (issues.size == 1) {
-            val issue: MessageIssue = issues[0]
-            ResponseError(issue.code, issue.text, issue.cause)
-        } else {
-            val message = "Multiple issues were found in '" + requestMessage.method + "' request."
-            ResponseError(ResponseErrorCode.InvalidRequest.value, message, issues)
-        }
-        out.consume(createErrorResponseMessage(requestMessage, errorObject))
+            if (issues.size == 1) {
+                val issue: MessageIssue = issues[0]
+                val serializedIssue = jsonHandler.serialize(issue.cause)
+                ResponseError(issue.code, issue.text, serializedIssue)
+            } else {
+                val message = "Multiple issues were found in '" + requestMessage.method + "' request."
+                val serializedIssues = jsonHandler.serialize(issues)
+                ResponseError(ResponseErrorCode.InvalidRequest.value, message, serializedIssues)
+            }
+        out.consume(ResponseMessage.Error(requestId, errorObject))
     }
 
-    protected fun handleResponseIssues(responseMessage: ResponseMessage, issues: List<MessageIssue>) {
+    private fun handleResponseIssues(responseMessage: ResponseMessage, issues: List<MessageIssue>) {
         var requestInfo: PendingRequestInfo?
         synchronized(sentRequestMap) { requestInfo = sentRequestMap.remove(responseMessage.id) }
         if (requestInfo == null) {
@@ -267,18 +271,7 @@ class RemoteEndpoint(
         }
     }
 
-    protected fun createResultResponseMessage(requestMessage: RequestMessage, result: Any?): ResponseMessage {
-        return ResponseMessage(requestMessage.id, result)
-    }
-
-    protected fun createErrorResponseMessage(
-        requestMessage: RequestMessage,
-        errorObject: ResponseError?
-    ): ResponseMessage {
-        return ResponseMessage(requestMessage.id, error = errorObject)
-    }
-
-    protected fun isCancellation(t: Throwable?): Boolean {
+    private fun isCancellation(t: Throwable?): Boolean {
         return if (t is CompletionException) {
             isCancellation(t.cause)
         } else t is CancellationException
@@ -316,8 +309,7 @@ class RemoteEndpoint(
             val stackTraceWriter = PrintWriter(stackTrace)
             throwable.printStackTrace(stackTraceWriter)
             stackTraceWriter.flush()
-            val data = stackTrace.toString()
-
+            val data = JsonPrimitive(stackTrace.toString())
             return ResponseError(ResponseErrorCode.InternalError.value, "$header.", data)
         }
     }

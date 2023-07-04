@@ -3,6 +3,7 @@ package com.jetbrains.bsp.messages
 import com.jetbrains.bsp.json.JsonDeserialization
 import com.jetbrains.bsp.json.JsonSerialization
 import com.jetbrains.bsp.messages.Message.Companion.JSONRPC_VERSION
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 
@@ -50,6 +51,7 @@ sealed interface Message : JsonSerialization {
     }
 }
 
+@Serializable
 sealed interface MessageId : JsonSerialization {
     @JvmInline
     value class NumberId(val id: Int) : MessageId
@@ -96,17 +98,21 @@ sealed interface JsonParams : JsonSerialization {
         }
     }
 
-    companion object : JsonDeserialization<JsonParams> {
-        override fun deserialize(json: JsonElement): JsonParams {
+    val size: Int get() {
+        return when (this) {
+            is ObjectParams -> 1
+            is ArrayParams -> params.size
+        }
+    }
+
+    companion object : JsonDeserialization<JsonParams?> {
+        override fun deserialize(json: JsonElement): JsonParams? {
             return when (json) {
                 is JsonObject -> ObjectParams(json)
                 is JsonArray -> ArrayParams(json)
+                is JsonNull -> null
                 else -> throw SerializationException("Expected a JSON object or array for JsonParams")
             }
-        }
-
-        fun fromList(list: List<Any?>): JsonParams {
-
         }
     }
 }

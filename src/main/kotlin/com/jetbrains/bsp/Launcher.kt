@@ -64,7 +64,7 @@ interface Launcher<Local, Remote> {
         private fun createRemoteEndpoint(jsonHandler: MessageJsonHandler): RemoteEndpoint {
             val outgoingMessageStream: MessageConsumer = StreamMessageConsumer(output, jsonHandler)
             val localEndpoint: Endpoint = ServiceEndpoints.toEndpoint(localService)
-            val remoteEndpoint = RemoteEndpoint(outgoingMessageStream, localEndpoint, exceptionHandler)
+            val remoteEndpoint = RemoteEndpoint(outgoingMessageStream, localEndpoint, jsonHandler, exceptionHandler)
             jsonHandler.methodProvider = remoteEndpoint
             return remoteEndpoint
         }

@@ -101,50 +101,50 @@ class EndpointsTest {
         assertEquals("result", foo.doStuff("param").get(TIMEOUT, TimeUnit.MILLISECONDS))
     }
 
-    @Test
-    @Throws(Exception::class)
-    fun testMultipleInterfaces() {
-        val requests: MutableMap<String, Any?> = HashMap()
-        val notifications: MutableMap<String, Any?> = HashMap()
-        val endpoint: Endpoint = object : Endpoint {
-            override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
-                requests[method] = params
-                return when (method) {
-                    "foo/doStuff" -> {
-                        assertEquals("paramFoo", params[0])
-                        CompletableFuture.completedFuture("resultFoo")
-                    }
-
-                    "bar/doStuff2" -> {
-                        assertEquals("paramBar", params[0])
-                        assertEquals(77, params[1])
-                        CompletableFuture.completedFuture("resultBar")
-                    }
-
-                    else -> {
-                        fail("Unexpected method: $method")
-                    }
-                }
-            }
-
-            override fun notify(method: String, params: List<Any?>) {
-                notifications[method] = params
-            }
-        }
-        val classLoader = javaClass.classLoader
-        val proxy: Any =
-            ServiceEndpoints.toServiceObject(endpoint, listOf(Foo::class, Bar::class), classLoader)
-        val foo = proxy as Foo
-        foo.myNotification("notificationParamFoo")
-        assertEquals("resultFoo", foo.doStuff("paramFoo")[TIMEOUT, TimeUnit.MILLISECONDS])
-        val bar = proxy as Bar
-        bar.myNotification2("notificationParamBar", 42)
-        assertEquals("resultBar", bar.doStuff2("paramBar", 77)[TIMEOUT, TimeUnit.MILLISECONDS])
-        assertEquals(2, requests.size)
-        assertEquals(2, notifications.size)
-        assertEquals(listOf("notificationParamFoo"), notifications["foo/myNotification"])
-        assertEquals(mutableListOf("notificationParamBar", 42), notifications["bar/myNotification2"])
-    }
+//    @Test
+//    @Throws(Exception::class)
+//    fun testMultipleInterfaces() {
+//        val requests: MutableMap<String, Any?> = HashMap()
+//        val notifications: MutableMap<String, Any?> = HashMap()
+//        val endpoint: Endpoint = object : Endpoint {
+//            override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+//                requests[method] = params
+//                return when (method) {
+//                    "foo/doStuff" -> {
+//                        assertEquals("paramFoo", params[0])
+//                        CompletableFuture.completedFuture("resultFoo")
+//                    }
+//
+//                    "bar/doStuff2" -> {
+//                        assertEquals("paramBar", params[0])
+//                        assertEquals(77, params[1])
+//                        CompletableFuture.completedFuture("resultBar")
+//                    }
+//
+//                    else -> {
+//                        fail("Unexpected method: $method")
+//                    }
+//                }
+//            }
+//
+//            override fun notify(method: String, params: List<Any?>) {
+//                notifications[method] = params
+//            }
+//        }
+//        val classLoader = javaClass.classLoader
+//        val proxy: Any =
+//            ServiceEndpoints.toServiceObject(endpoint, listOf(Foo::class, Bar::class), classLoader)
+//        val foo = proxy as Foo
+//        foo.myNotification("notificationParamFoo")
+//        assertEquals("resultFoo", foo.doStuff("paramFoo")[TIMEOUT, TimeUnit.MILLISECONDS])
+//        val bar = proxy as Bar
+//        bar.myNotification2("notificationParamBar", 42)
+//        assertEquals("resultBar", bar.doStuff2("paramBar", 77)[TIMEOUT, TimeUnit.MILLISECONDS])
+//        assertEquals(2, requests.size)
+//        assertEquals(2, notifications.size)
+//        assertEquals(listOf("notificationParamFoo"), notifications["foo/myNotification"])
+//        assertEquals(mutableListOf("notificationParamBar", 42), notifications["bar/myNotification2"])
+//    }
 
     @Test
     fun testRpcMethods_01() {

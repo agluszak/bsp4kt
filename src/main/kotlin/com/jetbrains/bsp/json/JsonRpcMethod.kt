@@ -1,6 +1,5 @@
 package com.jetbrains.bsp.json
 
-import java.lang.reflect.Type
 import kotlin.reflect.KType
 import kotlin.reflect.typeOf
 
@@ -9,7 +8,7 @@ import kotlin.reflect.typeOf
  * A description of a JSON-RPC method.
  */
 data class JsonRpcMethod(
-    val methodName: String, val parameterTypes: List<KType>, val returnType: KType, val isNotification: Boolean
+    val methodName: String, val parameterTypes: List<KType>, val resultType: KType, val isNotification: Boolean
 ) {
 
     override fun toString(): String {
@@ -17,7 +16,7 @@ data class JsonRpcMethod(
         if (isNotification) builder.append("JsonRpcMethod (notification) {\n") else builder.append("JsonRpcMethod (request) {\n")
         builder.append("\tmethodName: ").append(methodName).append('\n')
         if (parameterTypes != null) builder.append("\tparameterTypes: ").append(parameterTypes).append('\n')
-        if (returnType != null) builder.append("\treturnType: ").append(returnType).append('\n')
+        if (resultType != null) builder.append("\treturnType: ").append(resultType).append('\n')
         builder.append("}")
         return builder.toString()
     }

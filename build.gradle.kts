@@ -14,9 +14,6 @@ repositories {
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.1")
-    implementation("io.github.rhdunn:xqt-kotlinx-json-rpc:1.0.3")
-    implementation("io.arrow-kt:arrow-core:1.2.0-RC")
-    implementation("io.arrow-kt:arrow-fx-coroutines:1.2.0-RC")
     implementation("org.jetbrains.kotlin:kotlin-reflect:1.8.21")
     implementation(kotlin("stdlib"))
 }

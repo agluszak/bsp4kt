@@ -114,6 +114,10 @@ sealed interface JsonParams : JsonSerialization {
                 else -> throw SerializationException("Expected a JSON object or array for JsonParams")
             }
         }
+
+        fun array(vararg params: JsonElement): JsonParams {
+            return ArrayParams(JsonArray(params.toList()))
+        }
     }
 }
 

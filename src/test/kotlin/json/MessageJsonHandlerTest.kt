@@ -647,7 +647,7 @@ class MessageJsonHandlerTest {
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
-            typeOf<List<MyEnum>>()
+            typeOf<List<MyEnum?>>()
         )
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
         handler.methodProvider = MethodProvider { "foo" }
@@ -795,10 +795,8 @@ class MessageJsonHandlerTest {
         )
         testAllPermutations(properties) { json: String ->
             val message = handler.parseMessage(json) as ResponseMessage.Result
-            val result: Any = message.result!!
+            val result = handler.deserializeResult("foo", message.result) as Location
 
-            val class1: Class<out Any> = result.javaClass
-            assertEquals(Location::class.java, class1)
             assertEquals(
                 "dummy://mymodel.mydsl",
                 (result as Location).uri
@@ -849,8 +847,7 @@ class MessageJsonHandlerTest {
         testAllPermutations(properties) { json: String ->
             val message: NotificationMessage = handler.parseMessage(json) as NotificationMessage
             val params = handler.deserializeParams("foo", message.params)
-            val class1: Class<out Any> = params.javaClass
-            assertEquals(Location::class.java, class1)
+
             assertEquals(
                 "dummy://mymodel.mydsl",
                 (params[0] as Location).uri
@@ -879,6 +876,7 @@ class MessageJsonHandlerTest {
             typeOf<String>(),
             typeOf<String>()
         )
+        handler.methodProvider = MethodProvider { "testMethod" }
         val request = ("{\n"
                 + "  \"jsonrpc\": \"2.0\",\n"
                 + "  \"id\": 1,\n"
@@ -889,7 +887,7 @@ class MessageJsonHandlerTest {
                 + "}")
         // Check parse - unwrap primitive
         val message: RequestMessage = handler.parseMessage(request) as RequestMessage
-        val params = handler.deserializeParams("foo", message.params)
+        val params = handler.deserializeParams("testMethod", message.params)
         assertEquals(listOf("param"), params)
     }
 
@@ -927,28 +925,30 @@ class MessageJsonHandlerTest {
         val message: RequestMessage = handler.parseMessage(request) as RequestMessage
 
         // Check parse - unwrap array
-        val params = handler.deserializeParams("foo", message.params)
+        val params = handler.deserializeParams("testMethod", message.params)
         assertEquals(listOf(listOf(true, false)), params)
     }
 
-//    @Test
-//    fun testWrapMultipleParams_JsonRpc2_0() {
-//        val handler: MessageJsonHandler = createSimpleRequestHandler(
-//            typeOf<String>(),
-//            typeOf<Boolean>(),
-//            typeOf<String>()
-//        )
-//        val request = RequestMessage(
-//            MessageId.NumberId(1),
-//            handler.methodProvider!!.resolveMethod(null)!!,
-//            listOf(true, "param2")
-//        )
-//        // Check serialize - wrap primitive wrapper
-//        assertEquals(
-//            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"testMethod\",\"params\":[true,\"param2\"]}",
-//            handler.serialize(request)
-//        )
-//    }
+    @Test
+    fun testWrapMultipleParams_JsonRpc2_0() {
+        val handler: MessageJsonHandler = createSimpleRequestHandler(
+            typeOf<String>(),
+            typeOf<Boolean>(),
+            typeOf<String>()
+        )
+        handler.methodProvider = MethodProvider { "testMethod" }
+
+        val request = RequestMessage(
+            MessageId.NumberId(1),
+            handler.methodProvider!!.resolveMethod(null)!!,
+            JsonParams.array(JsonPrimitive(true), JsonPrimitive( "param2"))
+        )
+        // Check serialize - wrap primitive wrapper
+        assertEquals(
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"testMethod\",\"params\":[true,\"param2\"]}",
+            handler.serialize(request)
+        )
+    }
 
     @Test
     fun testUnwrapMultipleParams_JsonRpc2_0() {
@@ -957,6 +957,7 @@ class MessageJsonHandlerTest {
             typeOf<Boolean>(),
             typeOf<String>()
         )
+        handler.methodProvider = MethodProvider { "testMethod" }
         val request = ("{\n"
                 + "  \"jsonrpc\": \"2.0\",\n"
                 + "  \"id\": 1,\n"
@@ -969,27 +970,27 @@ class MessageJsonHandlerTest {
         val message: RequestMessage = handler.parseMessage(request) as RequestMessage
 
         // Check parse - unwrap array
-        val params = handler.deserializeParams("foo", message.params)
+        val params = handler.deserializeParams("testMethod", message.params)
         assertEquals(listOf(true, "param2"), params)
     }
 
-//    @Test
-//    fun testWrapMultipleParamsWithArray_JsonRpc2_0() {
-//        val handler: MessageJsonHandler = createSimpleRequestHandler(
-//            typeOf<String>(), typeOf<List<Boolean>>(),
-//            typeOf<String>()
-//        )
-//        val request = RequestMessage(
-//            MessageId.NumberId(1),
-//            handler.methodProvider!!.resolveMethod(null)!!,
-//            listOf(listOf(true, false), "param2")
-//        )
-//        // Check serialize - wrap primitive wrapper
-//        assertEquals(
-//            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"testMethod\",\"params\":[[true,false],\"param2\"]}",
-//            handler.serialize(request)
-//        )
-//    }
+    @Test
+    fun testWrapMultipleParamsWithArray_JsonRpc2_0() {
+        val handler: MessageJsonHandler = createSimpleRequestHandler(
+            typeOf<String>(), typeOf<List<Boolean>>(),
+            typeOf<String>()
+        )
+        val request = RequestMessage(
+            MessageId.NumberId(1),
+            handler.methodProvider!!.resolveMethod(null)!!,
+            JsonParams.array(JsonArray(listOf(JsonPrimitive(true), JsonPrimitive(false))), JsonPrimitive("param2"))
+        )
+        // Check serialize - wrap primitive wrapper
+        assertEquals(
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"testMethod\",\"params\":[[true,false],\"param2\"]}",
+            handler.serialize(request)
+        )
+    }
 
     @Test
     fun testUnwrapMultipleParamsWithArray_JsonRpc2_0() {
@@ -997,6 +998,7 @@ class MessageJsonHandlerTest {
             typeOf<String>(), typeOf<List<Boolean>>(),
             typeOf<String>()
         )
+        handler.methodProvider = MethodProvider { "testMethod" }
         val request = ("{\n"
                 + "  \"jsonrpc\": \"2.0\",\n"
                 + "  \"id\": 1,\n"
@@ -1012,7 +1014,7 @@ class MessageJsonHandlerTest {
         val message: RequestMessage = handler.parseMessage(request) as RequestMessage
 
         // Check parse - unwrap array
-        val params = handler.deserializeParams("foo", message.params)
+        val params = handler.deserializeParams("testMethod", message.params)
         assertEquals(listOf(listOf(true, false), "param2"), params)
     }
 

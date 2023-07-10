@@ -1,5 +1,6 @@
 package com.jetbrains.bsp.json
 
+import com.jetbrains.bsp.json.serializers.WrappingListSerializer
 import com.jetbrains.bsp.messages.CancelParams
 import com.jetbrains.bsp.messages.JsonParams
 import com.jetbrains.bsp.messages.Message
@@ -77,7 +78,8 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
             is JsonParams.ArrayParams -> {
                 // If the method has a single parameter of type List, we deserialize the whole array as that parameter
                 if (jsonRpcMethod.parameterTypes.size == 1 && jsonRpcMethod.parameterTypes[0].isSubtypeOf(typeOf<List<*>>())) {
-                    json.decodeFromJsonElement(json.serializersModule.serializer(jsonRpcMethod.parameterTypes[0]), params.params)
+                    val serializer = WrappingListSerializer(json.serializersModule.serializer(jsonRpcMethod.parameterTypes[0]))
+                    return json.decodeFromJsonElement(serializer, params.params)
                 }
                 // Otherwise, we treat the array as a list of parameters and add nulls if the array is too short
                 val jsonArray = if (size < jsonRpcMethod.parameterTypes.size) {

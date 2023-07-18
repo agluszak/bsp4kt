@@ -4,6 +4,7 @@ import com.jetbrains.bsp.json.serializers.WrappingListSerializer
 import com.jetbrains.bsp.messages.CancelParams
 import com.jetbrains.bsp.messages.JsonParams
 import com.jetbrains.bsp.messages.Message
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import kotlinx.serialization.serializer
@@ -45,13 +46,14 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
         return when (params.size) {
             0 -> JsonParams.ObjectParams(buildJsonObject { })
             1 -> {
-                when (val jsonElement = json.encodeToJsonElement(json.serializersModule.serializer(), params[0])) {
+                when (val jsonElement = json.encodeToJsonElement(json.serializersModule.serializer(jsonRpcMethod.parameterTypes[0]), params[0])) {
                     is JsonObject -> JsonParams.ObjectParams(jsonElement)
                     else -> JsonParams.ArrayParams(JsonArray(listOf(jsonElement)))
                 }
             }
 
             else -> {
+                // TODO use correct serializers for each parameter
                 val jsonElement = json.encodeToJsonElement(json.serializersModule.serializer(), params)
                 JsonParams.ArrayParams(jsonElement.jsonArray)
             }
@@ -78,7 +80,9 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
             is JsonParams.ArrayParams -> {
                 // If the method has a single parameter of type List, we deserialize the whole array as that parameter
                 if (jsonRpcMethod.parameterTypes.size == 1 && jsonRpcMethod.parameterTypes[0].isSubtypeOf(typeOf<List<*>>())) {
-                    val serializer = WrappingListSerializer(json.serializersModule.serializer(jsonRpcMethod.parameterTypes[0]))
+                    val elementType = json.serializersModule.serializer(jsonRpcMethod.parameterTypes[0])
+                    println("elementType: $elementType")
+                    val serializer = ListSerializer(elementType)
                     return json.decodeFromJsonElement(serializer, params.params)
                 }
                 // Otherwise, we treat the array as a list of parameters and add nulls if the array is too short

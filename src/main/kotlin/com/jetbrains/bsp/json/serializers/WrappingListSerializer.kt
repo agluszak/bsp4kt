@@ -10,11 +10,13 @@ class WrappingListSerializer<T>(private val elementSerializer: KSerializer<T>) :
     ListSerializer(elementSerializer)
 ) {
     // If response is not an array, then it is a single object that should be wrapped into the array
-    override fun transformDeserialize(element: JsonElement): JsonElement =
-        if (element !is JsonArray) JsonArray(listOf(element)) else element
+    override fun transformDeserialize(element: JsonElement): JsonElement  {
+        return  if (element !is JsonArray) JsonArray(listOf(element)) else element
+    }
+
 
     override fun transformSerialize(element: JsonElement): JsonElement {
-        require(element is JsonArray) // this serializer is used only with lists
+        if (element !is JsonArray) return element
         return element.singleOrNull() ?: element
     }
 }

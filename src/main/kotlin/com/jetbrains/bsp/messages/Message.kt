@@ -54,9 +54,11 @@ sealed interface Message : JsonSerialization {
 @Serializable
 sealed interface MessageId : JsonSerialization {
     @JvmInline
+    @Serializable
     value class NumberId(val id: Int) : MessageId
 
     @JvmInline
+    @Serializable
     value class StringId(val id: String) : MessageId
 
     override fun serializeToJson(): JsonElement {

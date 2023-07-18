@@ -1,17 +1,10 @@
 package com.jetbrains.bsp.services
 
-import java.lang.reflect.Method
-import java.lang.reflect.Parameter
-import java.lang.reflect.Type
-import java.util.*
 import java.util.function.Consumer
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KType
-import kotlin.reflect.full.declaredMemberFunctions
-import kotlin.reflect.full.findAnnotation
-import kotlin.reflect.full.findAnnotations
-import kotlin.reflect.full.superclasses
+import kotlin.reflect.full.*
 import kotlin.reflect.jvm.isAccessible
 
 object AnnotationUtil {
@@ -64,7 +57,9 @@ object AnnotationUtil {
 
     internal fun createMethodInfo(method: KFunction<*>, useSegment: Boolean, segment: String, value: String?): MethodInfo {
         method.isAccessible = true // TODO: is this necessary?
-        return MethodInfo(getMethodName(method, useSegment, segment, value), method, method.parameters.map { it.type })
+        val name = getMethodName(method, useSegment, segment, value)
+        val parameterTypes =method.valueParameters.map { it.type } // Exclues receiver type
+        return MethodInfo(name, method, parameterTypes)
     }
 
     internal fun getMethodName(method: KFunction<*>, useSegment: Boolean, segment: String, value: String?): String {

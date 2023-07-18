@@ -131,9 +131,11 @@ class RemoteEndpoint(
                 // The remote service has replied with an error
                 requestInfo!!.future.completeExceptionally(ResponseErrorException(responseMessage.error))
 
-            is ResponseMessage.Result ->
+            is ResponseMessage.Result -> {
                 // The remote service has replied with a result object
-                requestInfo!!.future.complete(responseMessage.result)
+                val deserialized = jsonHandler.deserializeResult(requestInfo!!.requestMessage.method, responseMessage.result)
+                requestInfo!!.future.complete(deserialized)
+            }
         }
     }
 

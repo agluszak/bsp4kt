@@ -40,7 +40,7 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
 
     @Throws(Throwable::class)
     override fun invoke(proxy: Any, method: Method, args: Array<Any?>?): Any? {
-        val args = args?.toList() ?: listOf()
+        val args = args?.toList() ?: emptyList()
         val methodInfo: AnnotationUtil.MethodInfo? = methodInfos[method.name]
         if (methodInfo != null) {
             if (methodInfo.isNotification) {

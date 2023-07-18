@@ -46,7 +46,7 @@ interface Launcher<Local, Remote> {
             // Create the message processor
             val reader = StreamMessageProducer(input, jsonHandler, remoteEndpoint)
             val msgProcessor: ConcurrentMessageProcessor = createMessageProcessor(reader, remoteEndpoint, remoteProxy)
-            return createLauncher(executorService, remoteProxy, remoteEndpoint, msgProcessor)
+            return createLauncher(executorService, remoteProxy, msgProcessor)
         }
 
         /**
@@ -88,10 +88,9 @@ interface Launcher<Local, Remote> {
         protected fun createLauncher(
             execService: ExecutorService,
             remoteProxy: Remote,
-            remoteEndpoint: RemoteEndpoint,
             msgProcessor: ConcurrentMessageProcessor
         ): Launcher<Local, Remote> {
-            return StandardLauncher(execService, remoteProxy, remoteEndpoint, msgProcessor)
+            return StandardLauncher(execService, remoteProxy, msgProcessor)
         }
 
         /**
@@ -117,12 +116,6 @@ interface Launcher<Local, Remote> {
      * Returns the proxy instance that implements the remote service interfaces.
      */
     val remoteProxy: Remote
-
-    /**
-     * Returns the remote endpoint. Use this one to send generic `request` or `notify` methods
-     * to the remote services.
-     */
-    val remoteEndpoint: RemoteEndpoint
 
     companion object {
         /**

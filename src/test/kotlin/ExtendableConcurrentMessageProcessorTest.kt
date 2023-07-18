@@ -5,6 +5,7 @@ import com.jetbrains.bsp.MessageConsumer
 import com.jetbrains.bsp.MessageProducer
 import com.jetbrains.bsp.json.ConcurrentMessageProcessor
 import com.jetbrains.bsp.services.JsonRequest
+import kotlinx.serialization.Serializable
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
@@ -56,10 +57,12 @@ class ExtendableConcurrentMessageProcessorTest {
         )
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
+
         val fooFuture: CompletableFuture<MyParam> = clientSideLauncher.remoteProxy.askServer(MyParam("FOO"))
         val barFuture: CompletableFuture<MyParam> = serverSideLauncher.remoteProxy.askClient(MyParam("BAR"))
-        assertEquals("FOO", fooFuture[TIMEOUT, TimeUnit.MILLISECONDS].value)
-        assertEquals("BAR", barFuture[TIMEOUT, TimeUnit.MILLISECONDS].value)
+
+        assertEquals("FOO", fooFuture.get(TIMEOUT, TimeUnit.MILLISECONDS).value)
+        assertEquals("BAR", barFuture.get(TIMEOUT, TimeUnit.MILLISECONDS).value)
         assertFalse(testContext.error)
     }
 
@@ -96,6 +99,7 @@ class ExtendableConcurrentMessageProcessorTest {
         fun askClient(param: MyParam): CompletableFuture<MyParam>
     }
 
+    @Serializable
     data class MyParam(val value: String)
 
     class MyServerImpl(val testContext: TestContextWrapper<MyServer, MyClient>) : MyServer {

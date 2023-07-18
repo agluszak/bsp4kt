@@ -629,14 +629,15 @@ class MessageJsonHandlerTest {
         val message: RequestMessage = handler.parseMessage(
             ("{\"jsonrpc\":\"2.0\","
                     + "\"id\":\"2\",\n"
-                    + "\"params\": [1, 2, 3],\n"
+                    + "\"params\": [[1, 2, 3]],\n"
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
 
         val params = handler.deserializeParams("foo", message.params)
         assertEquals(
-            listOf(MyEnum.A, MyEnum.B, MyEnum.C),
+            listOf(
+            listOf(MyEnum.A, MyEnum.B, MyEnum.C)),
             params
         )
     }
@@ -654,14 +655,15 @@ class MessageJsonHandlerTest {
         val message: RequestMessage = handler.parseMessage(
             ("{\"jsonrpc\":\"2.0\","
                     + "\"id\":\"2\",\n"
-                    + "\"params\": [1, 2, null],\n"
+                    + "\"params\": [[1, 2, null]],\n"
                     + "\"method\":\"foo\"\n"
                     + "}")
         ) as RequestMessage
 
         val params = handler.deserializeParams("foo", message.params)
         assertEquals(
-            listOf(MyEnum.A, MyEnum.B, null),
+            listOf(
+            listOf(MyEnum.A, MyEnum.B, null)),
             params
         )
     }
@@ -769,8 +771,7 @@ class MessageJsonHandlerTest {
         testAllPermutations(properties) { json: String ->
             val message: RequestMessage = handler.parseMessage(json) as RequestMessage
             val params = handler.deserializeParams("foo", message.params)
-            val class1: Class<out Any> = params.javaClass
-            assertEquals(Location::class.java, class1)
+
             assertEquals(
                 "dummy://mymodel.mydsl",
                 (params[0] as Location).uri

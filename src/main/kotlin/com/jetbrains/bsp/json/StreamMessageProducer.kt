@@ -4,6 +4,7 @@ import com.jetbrains.bsp.*
 import com.jetbrains.bsp.messages.Message
 import com.jetbrains.bsp.messages.Message.Companion.CONTENT_LENGTH_HEADER
 import com.jetbrains.bsp.messages.Message.Companion.CONTENT_TYPE_HEADER
+import kotlinx.serialization.SerializationException
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -146,10 +147,15 @@ class StreamMessageProducer(
             try {
                 val message: Message = jsonHandler.parseMessage(content)
                 messageConsumer.consume(message)
-            } catch (exception: MessageIssueException) {
-                // An issue was found while parsing or validating the message
+//            } catch (exception: MessageIssueException) {
+//                // An issue was found while parsing or validating the message
+//                if (issueHandler != null) issueHandler.handle(
+//                    exception.rpcMessage, exception.issues
+//                ) else fireError(exception)
+//            }
+            } catch (exception: SerializationException) {
                 if (issueHandler != null) issueHandler.handle(
-                    exception.rpcMessage, exception.issues
+                    exception.issues
                 ) else fireError(exception)
             }
         } catch (exception: Exception) {

@@ -1,47 +1,65 @@
+
 package com.jetbrains.bsp.messages
 
-import com.jetbrains.bsp.json.JsonDeserialization
-import com.jetbrains.bsp.json.JsonSerialization
 import com.jetbrains.bsp.messages.Message.Companion.JSONRPC_VERSION
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
+import kotlinx.serialization.*
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.*
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 
-sealed interface Message : JsonSerialization {
-    companion object : JsonDeserialization<Message> {
+@Serializable(with = Message.Companion::class)
+sealed interface Message {
+    companion object : KSerializer<Message> {
         const val JSONRPC_VERSION = "2.0"
         const val CONTENT_LENGTH_HEADER = "Content-Length"
         const val CONTENT_TYPE_HEADER = "Content-Type"
         const val JSON_MIME_TYPE = "application/json"
         const val CRLF = "\r\n"
 
-        override fun deserialize(json: JsonElement): Message {
-            when (json) {
+        override val descriptor: SerialDescriptor
+            // It's incorrect, but it doesn't matter
+            get() = PrimitiveSerialDescriptor("Message", PrimitiveKind.STRING)
+
+        override fun deserialize(decoder: Decoder): Message {
+            val jsonDecoder = decoder as JsonDecoder
+            val json = jsonDecoder.decodeJsonElement()
+            val deserializer = selectDeserializer(json)
+            return jsonDecoder.json.decodeFromJsonElement(deserializer, json)
+        }
+
+        val notificationSerializer = JsonRpcMessageTransformingSerializer(NotificationMessage.serializer())
+        val requestSerializer = JsonRpcMessageTransformingSerializer(RequestMessage.serializer())
+        val responseSerializer = JsonRpcMessageTransformingSerializer(ResponseMessage.serializer())
+
+        override fun serialize(encoder: Encoder, value: Message) {
+            val jsonEncoder = encoder as JsonEncoder
+            val json = when (value) {
+                is NotificationMessage -> jsonEncoder.json.encodeToJsonElement(notificationSerializer, value)
+                is RequestMessage -> jsonEncoder.json.encodeToJsonElement(requestSerializer, value)
+                is ResponseMessage -> jsonEncoder.json.encodeToJsonElement(responseSerializer, value)
+            }
+            jsonEncoder.encodeJsonElement(json)
+        }
+
+        fun selectDeserializer(element: JsonElement): DeserializationStrategy<Message> {
+            return when (element) {
                 is JsonObject -> {
-                    ensureJsonRpcVersion(json)
-                    val id = json["id"]?.let { MessageId.deserialize(it) }
-                    val method = json["method"]?.jsonPrimitive?.content
-                    val params = json["params"]?.let { JsonParams.deserialize(it) }
-                    return if (method != null) {
+                    val id = element["id"]
+                    val method = element["method"]
+                    val result = element["result"]
+                    val error = element["error"]
+                    if (method != null) {
                         if (id != null) {
-                            RequestMessage(id, method, params)
+                            requestSerializer
                         } else {
-                            NotificationMessage(method, params)
+                            notificationSerializer
                         }
+                    } else if (error != null || result != null) {
+                        responseSerializer
                     } else {
-                        if (id == null) {
-                            throw SerializationException("Expected a method or id for Message")
-                        } else {
-                            val result = json["result"]
-                            val error = json["error"]?.let { ResponseError.deserialize(it) }
-                            if (result != null) {
-                                ResponseMessage.Result(id, result)
-                            } else if (error != null) {
-                                ResponseMessage.Error(id, error)
-                            } else {
-                                throw SerializationException("A response message must have a result or an error")
-                            }
-                        }
+                        throw SerializationException("Expected a method, result, or error property for Message")
                     }
                 }
 
@@ -51,31 +69,27 @@ sealed interface Message : JsonSerialization {
     }
 }
 
-@Serializable
-sealed interface MessageId : JsonSerialization {
-    @JvmInline
+@Serializable(with = MessageId.Companion::class)
+sealed interface MessageId {
     @Serializable
+    @JvmInline
     value class NumberId(val id: Int) : MessageId
 
-    @JvmInline
     @Serializable
+    @JvmInline
     value class StringId(val id: String) : MessageId
 
-    override fun serializeToJson(): JsonElement {
-        return when (this) {
-            is NumberId -> JsonPrimitive(id)
-            is StringId -> JsonPrimitive(id)
-        }
-    }
 
-    companion object : JsonDeserialization<MessageId> {
-        override fun deserialize(json: JsonElement): MessageId {
-            return when (json) {
+    companion object : JsonContentPolymorphicSerializer<MessageId>(MessageId::class) {
+        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<MessageId> {
+            return when (element) {
                 is JsonPrimitive -> {
-                    if (json.isString) {
-                        StringId(json.content)
+                    if (element.isString) {
+                        StringId.serializer()
+                    } else if (element.intOrNull != null) {
+                        NumberId.serializer()
                     } else {
-                        NumberId(json.int)
+                        throw SerializationException("Expected a string or number for MessageId")
                     }
                 }
 
@@ -86,39 +100,35 @@ sealed interface MessageId : JsonSerialization {
     }
 }
 
-sealed interface JsonParams : JsonSerialization {
+@Serializable(with = JsonParams.Companion::class)
+sealed interface JsonParams {
+    @Serializable
     @JvmInline
     value class ObjectParams(val params: JsonObject) : JsonParams
 
+    @Serializable
     @JvmInline
     value class ArrayParams(val params: JsonArray) : JsonParams
 
-    override fun serializeToJson(): JsonElement {
-        return when (this) {
-            is ObjectParams -> params
-            is ArrayParams -> params
-        }
-    }
-
-    val size: Int get() {
-        return when (this) {
-            is ObjectParams -> 1
-            is ArrayParams -> params.size
-        }
-    }
-
-    companion object : JsonDeserialization<JsonParams?> {
-        override fun deserialize(json: JsonElement): JsonParams? {
-            return when (json) {
-                is JsonObject -> ObjectParams(json)
-                is JsonArray -> ArrayParams(json)
-                is JsonNull -> null
-                else -> throw SerializationException("Expected a JSON object or array for JsonParams")
+    val size: Int
+        get() {
+            return when (this) {
+                is ObjectParams -> 1
+                is ArrayParams -> params.size
             }
         }
 
+    companion object : JsonContentPolymorphicSerializer<JsonParams>(JsonParams::class) {
         fun array(vararg params: JsonElement): JsonParams {
             return ArrayParams(JsonArray(params.toList()))
+        }
+
+        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<JsonParams> {
+            return when (element) {
+                is JsonObject -> ObjectParams.serializer()
+                is JsonArray -> ArrayParams.serializer()
+                else -> throw SerializationException("Expected a JSON object or array for JsonParams")
+            }
         }
     }
 }
@@ -128,80 +138,66 @@ fun ensureJsonRpcVersion(json: JsonObject) {
         if (it != JSONRPC_VERSION) {
             throw SerializationException("Expected jsonrpc version $JSONRPC_VERSION")
         }
+    } ?: throw SerializationException("Expected a jsonrpc property")
+}
+
+class JsonRpcMessageTransformingSerializer<T: Message>(serializer: KSerializer<T>) : JsonTransformingSerializer<T>(serializer) {
+    override fun transformDeserialize(element: JsonElement): JsonElement {
+        require(element is JsonObject)
+        ensureJsonRpcVersion(element)
+        // Remove the jsonrpc version
+        return JsonObject(element.toMutableMap().also { it.remove("jsonrpc") })
+    }
+
+    override fun transformSerialize(element: JsonElement): JsonElement {
+        require(element is JsonObject)
+        // Add the jsonrpc version, ensure it will be the first field
+        return JsonObject(element.toMutableMap().also { it["jsonrpc"] = JsonPrimitive(JSONRPC_VERSION) })
     }
 }
 
-data class NotificationMessage(val method: String, val params: JsonParams?) : Message {
-    override fun serializeToJson(): JsonElement {
-        return buildJsonObject {
-            put("jsonrpc", JSONRPC_VERSION)
-            put("method", method)
-            params?.let { put("params", it.serializeToJson()) }
-        }
-    }
-}
+@Serializable
+data class NotificationMessage(val method: String, val params: JsonParams? = null) : Message
+
+@Serializable
+data class RequestMessage(val id: MessageId, val method: String, val params: JsonParams? = null) : Message
+
+@Serializable
+data class ResponseError(val code: Int, val message: String, val data: JsonElement? = null)
 
 
-data class RequestMessage(val id: MessageId, val method: String, val params: JsonParams?) : Message {
-    override fun serializeToJson(): JsonElement {
-        return buildJsonObject {
-            put("jsonrpc", JSONRPC_VERSION)
-            put("id", id.serializeToJson())
-            put("method", method)
-            params?.let { put("params", it.serializeToJson()) }
-        }
-    }
-}
+@Serializable(with = ResponseMessage.Companion::class)
+sealed interface ResponseMessage : Message {
+    val id: MessageId?
 
-data class ResponseError(val code: Int, val message: String, val data: JsonElement?) : JsonSerialization {
-    override fun serializeToJson(): JsonElement {
-        return buildJsonObject {
-            put("code", code)
-            put("message", message)
-            data?.let { put("data", it) }
-        }
-    }
+    @Serializable
+    data class Result(override val id: MessageId, val result: JsonElement) : ResponseMessage
 
-    companion object : JsonDeserialization<ResponseError> {
-        override fun deserialize(json: JsonElement): ResponseError {
-            return when (json) {
+    @Serializable
+    data class Error(override val id: MessageId?, val error: ResponseError) : ResponseMessage
+
+    companion object : JsonContentPolymorphicSerializer<ResponseMessage>(ResponseMessage::class) {
+        override fun selectDeserializer(element: JsonElement): DeserializationStrategy<ResponseMessage> {
+            return when (element) {
                 is JsonObject -> {
-                    val code =
-                        json["code"]?.jsonPrimitive?.int ?: throw SerializationException("Expected a code property")
-                    val message = json["message"]?.jsonPrimitive?.content
-                        ?: throw SerializationException("Expected a message property")
-                    val data = json["data"]
-                    ResponseError(code, message, data)
+                    val id = element["id"]
+                    val result = element["result"]
+                    val error = element["error"]
+                    if (result != null) {
+                        Result.serializer()
+                    } else if (error != null) {
+                        Error.serializer()
+                    } else if (id != null) {
+                        throw SerializationException("Expected a result or error property for ResponseMessage")
+                    } else {
+                        throw SerializationException("Expected an id property for ResponseMessage")
+                    }
                 }
 
-                else -> throw SerializationException("Expected a JSON object for ResponseError")
+                else -> throw SerializationException("Expected a JSON object for ResponseMessage")
             }
         }
+
     }
 }
-
-sealed interface ResponseMessage : Message {
-    val id: MessageId
-
-    data class Result(override val id: MessageId, val result: JsonElement) : ResponseMessage {
-        override fun serializeToJson(): JsonElement {
-            return buildJsonObject {
-                put("jsonrpc", JSONRPC_VERSION)
-                put("id", id.serializeToJson())
-                put("result", result)
-            }
-        }
-    }
-
-    data class Error(override val id: MessageId, val error: ResponseError) : ResponseMessage {
-        override fun serializeToJson(): JsonElement {
-            return buildJsonObject {
-                put("jsonrpc", JSONRPC_VERSION)
-                put("id", id.serializeToJson())
-                put("error", error.serializeToJson())
-            }
-        }
-    }
-}
-
 

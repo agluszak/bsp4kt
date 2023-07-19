@@ -154,9 +154,10 @@ class StreamMessageProducer(
 //                ) else fireError(exception)
 //            }
             } catch (exception: SerializationException) {
-                if (issueHandler != null) issueHandler.handle(
-                    exception.issues
-                ) else fireError(exception)
+//                if (issueHandler != null) issueHandler.handle(
+//
+//                ) else fireError(exception)
+                fireError(exception)
             }
         } catch (exception: Exception) {
             // UnsupportedEncodingException can be thrown by String constructor

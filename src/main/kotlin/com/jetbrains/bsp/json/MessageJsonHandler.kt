@@ -5,6 +5,7 @@ import com.jetbrains.bsp.messages.CancelParams
 import com.jetbrains.bsp.messages.JsonParams
 import com.jetbrains.bsp.messages.Message
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import kotlinx.serialization.serializer
@@ -99,11 +100,10 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
     }
 
     fun parseMessage(input: String): Message {
-        val jsonElement = json.parseToJsonElement(input)
-        return Message.deserialize(jsonElement)
+        return json.decodeFromString(input)
     }
 
-    fun serialize(message: Message): String = json.encodeToString(message.serializeToJson())
+    fun serialize(message: Message): String = json.encodeToString(message)
 
     inline fun <reified T> serialize(value: T): JsonElement =
         json.encodeToJsonElement(json.serializersModule.serializer(), value)

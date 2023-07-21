@@ -1,6 +1,7 @@
 
 package com.jetbrains.bsp.messages
 
+import com.jetbrains.bsp.MessageIssueException
 import com.jetbrains.bsp.messages.Message.Companion.JSONRPC_VERSION
 import kotlinx.serialization.*
 import kotlinx.serialization.builtins.serializer
@@ -23,15 +24,23 @@ sealed interface Message {
             get() = PrimitiveSerialDescriptor("Message", PrimitiveKind.STRING)
 
         override fun deserialize(decoder: Decoder): Message {
-            val jsonDecoder = decoder as JsonDecoder
-            val json = jsonDecoder.decodeJsonElement()
+            require(decoder is JsonDecoder)
+            val json = decoder.decodeJsonElement()
             val deserializer = selectDeserializer(json)
-            return jsonDecoder.json.decodeFromJsonElement(deserializer, json)
+
+            require(json is JsonObject)
+            ensureJsonRpcVersion(json)
+
+            val jsonMutable = json.toMutableMap()
+            // Remove the jsonrpc version
+            jsonMutable.remove("jsonrpc")
+
+            return decoder.json.decodeFromJsonElement(deserializer, JsonObject(jsonMutable))
         }
 
-        val notificationSerializer = JsonRpcMessageTransformingSerializer(NotificationMessage.serializer())
-        val requestSerializer = JsonRpcMessageTransformingSerializer(RequestMessage.serializer())
-        val responseSerializer = JsonRpcMessageTransformingSerializer(ResponseMessage.serializer())
+        val notificationSerializer = NotificationMessage.serializer()
+        val requestSerializer = RequestMessage.serializer()
+        val responseSerializer = ResponseMessage.serializer()
 
         override fun serialize(encoder: Encoder, value: Message) {
             val jsonEncoder = encoder as JsonEncoder
@@ -40,7 +49,10 @@ sealed interface Message {
                 is RequestMessage -> jsonEncoder.json.encodeToJsonElement(requestSerializer, value)
                 is ResponseMessage -> jsonEncoder.json.encodeToJsonElement(responseSerializer, value)
             }
-            jsonEncoder.encodeJsonElement(json)
+            require(json is JsonObject)
+            // Add the jsonrpc version, ensure it will be the first field
+            val jsonWithJsonrpc = JsonObject(json.toMutableMap().also { it["jsonrpc"] = JsonPrimitive(JSONRPC_VERSION) })
+            jsonEncoder.encodeJsonElement(jsonWithJsonrpc)
         }
 
         fun selectDeserializer(element: JsonElement): DeserializationStrategy<Message> {
@@ -139,21 +151,6 @@ fun ensureJsonRpcVersion(json: JsonObject) {
             throw SerializationException("Expected jsonrpc version $JSONRPC_VERSION")
         }
     } ?: throw SerializationException("Expected a jsonrpc property")
-}
-
-class JsonRpcMessageTransformingSerializer<T: Message>(serializer: KSerializer<T>) : JsonTransformingSerializer<T>(serializer) {
-    override fun transformDeserialize(element: JsonElement): JsonElement {
-        require(element is JsonObject)
-        ensureJsonRpcVersion(element)
-        // Remove the jsonrpc version
-        return JsonObject(element.toMutableMap().also { it.remove("jsonrpc") })
-    }
-
-    override fun transformSerialize(element: JsonElement): JsonElement {
-        require(element is JsonObject)
-        // Add the jsonrpc version, ensure it will be the first field
-        return JsonObject(element.toMutableMap().also { it["jsonrpc"] = JsonPrimitive(JSONRPC_VERSION) })
-    }
 }
 
 @Serializable

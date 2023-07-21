@@ -8,5 +8,5 @@ interface MessageIssueHandler {
     /**
      * Handle issues found while parsing or validating a message. The list of issues must not be empty.
      */
-    fun handle(message: Message, issues: List<MessageIssue>)
+    fun handleIssues(message: Message?, issues: List<MessageIssue>)
 }

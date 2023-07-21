@@ -10,7 +10,7 @@ import java.util.stream.Collectors
  * found while parsing or validating a message. This information can be passed to a [MessageIssueHandler]
  * in order to construct a proper response.
  */
-class MessageIssueException(val rpcMessage: Message, val issues: List<MessageIssue>) : RuntimeException() {
+class MessageIssueException(val rpcMessage: Message?, val issues: List<MessageIssue>) : RuntimeException() {
     override val message: String?
         get() = issues.stream().map {it.text }.collect(Collectors.joining("\n"))
 

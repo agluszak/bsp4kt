@@ -5,6 +5,7 @@ import com.jetbrains.bsp.json.*
 import com.jetbrains.bsp.messages.ResponseError
 import com.jetbrains.bsp.services.ServiceEndpoints
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonBuilder
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ExecutorService
@@ -32,7 +33,9 @@ interface Launcher<Local, Remote> {
         val output: OutputStream,
         val localService: Local,
         val remoteInterface: KClass<out Remote>,
-        val json: Json = Json.Default,
+        val json: Json = Json {
+                              ignoreUnknownKeys = true
+        },
         val executorService: ExecutorService = Executors.newCachedThreadPool(),
         val exceptionHandler: Function<Throwable, ResponseError> = DEFAULT_EXCEPTION_HANDLER
     ) {
@@ -129,7 +132,7 @@ interface Launcher<Local, Remote> {
         fun <Local: Any, Remote: Any> createLauncher(
             localService: Local, remoteInterface: KClass<Remote>, input: InputStream, output: OutputStream
         ): Launcher<Local, Remote> {
-            return Builder<Local, Remote>(input, output, localService, remoteInterface).create()
+            return Builder(input, output, localService, remoteInterface).create()
         }
     }
 }

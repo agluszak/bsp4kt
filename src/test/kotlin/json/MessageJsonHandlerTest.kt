@@ -132,11 +132,13 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testSerializeEmptyList() {
+    fun `serialize notification with no params`() {
         val handler = MessageJsonHandler(Json.Default, emptyMap())
         val message = NotificationMessage("foo", null)
-        val json: String = handler.serialize(message)
-        assertEquals("{\"jsonrpc\":\"2.0\",\"method\":\"foo\"}", json)
+        val actual =  Json.parseToJsonElement(handler.serialize(message))
+
+        val expected = Json.parseToJsonElement("""{"jsonrpc":"2.0","method":"foo"}""")
+        assertEquals(expected, actual)
     }
 
 //    @Test

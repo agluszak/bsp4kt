@@ -219,7 +219,7 @@ class RemoteEndpoint(
         }
     }
 
-    override fun handle(message: Message, issues: List<MessageIssue>) {
+    override fun handleIssues(message: Message?, issues: List<MessageIssue>) {
         require(issues.isNotEmpty()) { "The list of issues must not be empty." }
         when (message) {
             is RequestMessage -> {
@@ -236,9 +236,10 @@ class RemoteEndpoint(
         }
     }
 
-    private fun logIssues(message: Message, issues: List<MessageIssue>) {
+    private fun logIssues(message: Message?, issues: List<MessageIssue>) {
+        val messageName = if (message == null) "message" else message.javaClass.simpleName
         for (issue in issues) {
-            val logMessage = "Issue found in " + message.javaClass.simpleName + ": " + issue.text
+            val logMessage = "Issue found in " + messageName + ": " + issue.text
             LOG.log(Level.WARNING, logMessage, issue.cause)
         }
     }

@@ -1,9 +1,12 @@
 package com.jetbrains.bsp.json
 
+import com.jetbrains.bsp.MessageIssueException
 import com.jetbrains.bsp.json.serializers.WrappingListSerializer
 import com.jetbrains.bsp.messages.CancelParams
 import com.jetbrains.bsp.messages.JsonParams
 import com.jetbrains.bsp.messages.Message
+import com.jetbrains.bsp.messages.MessageIssue
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -100,10 +103,21 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
     }
 
     fun parseMessage(input: String): Message {
-        return json.decodeFromString(input)
+        return try {
+            json.decodeFromString(input)
+        } catch (e: SerializationException) {
+            throw MessageIssueException(null, listOf(MessageIssue("Failed to parse message", cause = e)))
+        }
     }
 
-    fun serialize(message: Message): String = json.encodeToString(message)
+    fun serialize(message: Message): String {
+        return try {
+            json.encodeToString(message)
+        } catch (e: SerializationException) {
+            throw MessageIssueException(null, listOf(MessageIssue("Failed to serialize message", cause = e)))
+        }
+    }
+
 
     inline fun <reified T> serialize(value: T): JsonElement =
         json.encodeToJsonElement(json.serializersModule.serializer(), value)

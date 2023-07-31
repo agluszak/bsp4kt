@@ -76,13 +76,14 @@ class GenericEndpointTest {
 
     @Test
     fun testUnexpectedParams() {
-        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
-            val foo: Foo = Foo()
+        LogMessageAccumulator(RemoteEndpoint::class).use {
+            val foo = Foo()
             val endpoint = GenericEndpoint(foo)
             assertEquals(0, foo.calls)
             endpoint.notify("myNotification", listOf(Any()))
             assertEquals(1, foo.calls)
             endpoint.notify("myNotification", listOf(Any(), Any()))
+            // TODO: check for log message
         }
     }
 

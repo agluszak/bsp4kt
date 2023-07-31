@@ -40,30 +40,30 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
 
     @Throws(Throwable::class)
     override fun invoke(proxy: Any, method: Method, args: Array<Any?>?): Any? {
-        val args = args?.toList() ?: emptyList()
+        val argsList = args?.toList() ?: emptyList()
         val methodInfo: AnnotationUtil.MethodInfo? = methodInfos[method.name]
         if (methodInfo != null) {
             if (methodInfo.isNotification) {
-                delegate.notify(methodInfo.name, args)
+                delegate.notify(methodInfo.name, argsList)
                 return null
             }
-            return delegate.request(methodInfo.name, args)
+            return delegate.request(methodInfo.name, argsList)
         }
-        if (object_equals == method && args.size == 1) {
-            if (args[0] != null) {
+        if (object_equals == method && argsList.size == 1) {
+            if (argsList[0] != null) {
                 try {
-                    return this == Proxy.getInvocationHandler(args[0])
+                    return this == Proxy.getInvocationHandler(argsList[0])
                 } catch (_: IllegalArgumentException) {
                 }
             }
-            return this == args[0]
+            return this == argsList[0]
         }
         if (object_hashCode == method) {
             return this.hashCode()
         }
         return if (object_toString == method) {
             this.toString()
-        } else method.invoke(delegate, args)
+        } else method.invoke(delegate, argsList)
     }
 
     override fun toString(): String {

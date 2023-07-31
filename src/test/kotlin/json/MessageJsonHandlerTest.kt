@@ -36,8 +36,9 @@ class MessageJsonHandlerTest {
     data class Position(val line: Int = 0, val character: Int = 0)
 
     @Test
-    fun testParseList_01() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    @Suppress("UNCHECKED_CAST")
+    fun `parse list`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<List<Entry>>(),
@@ -46,15 +47,19 @@ class MessageJsonHandlerTest {
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
         val message: Message = handler.deserializeMessage(
-            "{\"jsonrpc\":\"2.0\","
-                    + "\"id\":\"2\",\n"
-                    + " \"result\": [\n"
-                    + "  {\"name\":\"\$schema\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":1,\"character\":3},\"end\":{\"line\":1,\"character\":55}}}},\n"
-                    + "  {\"name\":\"type\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":2,\"character\":3},\"end\":{\"line\":2,\"character\":19}}}},\n"
-                    + "  {\"name\":\"title\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":3,\"character\":3},\"end\":{\"line\":3,\"character\":50}}}},\n"
-                    + "  {\"name\":\"additionalProperties\",\"kind\":17,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":4,\"character\":4},\"end\":{\"line\":4,\"character\":32}}}},\n"
-                    + "  {\"name\":\"properties\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":5,\"character\":3},\"end\":{\"line\":5,\"character\":20}}}}\n"
-                    + "]}"
+            """
+                {
+                 "jsonrpc":"2.0",
+                 "id":"2",
+                 "result": [
+                   {"name":"${'$'}schema","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":1,"character":3},"end":{"line":1,"character":55}}}},
+                   {"name":"type","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":2,"character":3},"end":{"line":2,"character":19}}}},
+                   {"name":"title","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":3,"character":3},"end":{"line":3,"character":50}}}},
+                   {"name":"additionalProperties","kind":17,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":4,"character":4},"end":{"line":4,"character":32}}}},
+                   {"name":"properties","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":5,"character":3},"end":{"line":5,"character":31}}}}
+                 ]
+                }
+            """.trimIndent()
         )
         val result = handler.deserializeResult("foo", (message as ResponseMessage.Result).result) as List<Entry>
         assertEquals(5, result.size)
@@ -64,8 +69,9 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testParseList_02() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    @Suppress("UNCHECKED_CAST")
+    fun `parse set`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Set<Entry>>(),
@@ -74,15 +80,19 @@ class MessageJsonHandlerTest {
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
         val message: Message = handler.deserializeMessage(
-            ("{\"jsonrpc\":\"2.0\","
-                    + "\"id\":\"2\",\n"
-                    + " \"result\": [\n"
-                    + "  {\"name\":\"\$schema\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":1,\"character\":3},\"end\":{\"line\":1,\"character\":55}}}},\n"
-                    + "  {\"name\":\"type\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":2,\"character\":3},\"end\":{\"line\":2,\"character\":19}}}},\n"
-                    + "  {\"name\":\"title\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":3,\"character\":3},\"end\":{\"line\":3,\"character\":50}}}},\n"
-                    + "  {\"name\":\"additionalProperties\",\"kind\":17,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":4,\"character\":4},\"end\":{\"line\":4,\"character\":32}}}},\n"
-                    + "  {\"name\":\"properties\",\"kind\":15,\"location\":{\"uri\":\"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json\",\"range\":{\"start\":{\"line\":5,\"character\":3},\"end\":{\"line\":5,\"character\":20}}}}\n"
-                    + "]}")
+           """
+               {
+                "jsonrpc":"2.0",
+                "id":"2",
+                "result": [
+                  {"name":"${'$'}schema","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":1,"character":3},"end":{"line":1,"character":55}}}},
+                  {"name":"type","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":2,"character":3},"end":{"line":2,"character":19}}}},
+                  {"name":"title","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":3,"character":3},"end":{"line":3,"character":50}}}},
+                  {"name":"additionalProperties","kind":17,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":4,"character":4},"end":{"line":4,"character":32}}}},
+                  {"name":"properties","kind":15,"location":{"uri":"file:/home/mistria/runtime-EclipseApplication-with-patch/EclipseConEurope/something.json","range":{"start":{"line":5,"character":3},"end":{"line":5,"character":20}}}}
+                ]
+               }
+           """.trimIndent()
         )
         val result = handler.deserializeResult("foo", (message as ResponseMessage.Result).result) as Set<Entry>
         assertEquals(5, result.size)
@@ -92,8 +102,8 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testParseNullList() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    fun `parse null result`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<List<Entry>?>(),
@@ -102,17 +112,22 @@ class MessageJsonHandlerTest {
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
         val message: Message = handler.deserializeMessage(
-            ("{\"jsonrpc\":\"2.0\","
-                    + "\"id\":\"2\",\n"
-                    + " \"result\": null}")
+            """
+                {
+                "jsonrpc":"2.0",
+                "id":"2",
+                "result": null
+                }
+            """.trimIndent()
         )
         val result = handler.deserializeResult("foo", (message as ResponseMessage.Result).result)
         assertNull(result)
     }
 
     @Test
-    fun testParseEmptyList() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    @Suppress("UNCHECKED_CAST")
+    fun `parse empty list`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<List<Entry>>(),
@@ -121,9 +136,11 @@ class MessageJsonHandlerTest {
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
         val message: Message = handler.deserializeMessage(
-            ("{\"jsonrpc\":\"2.0\","
-                    + "\"id\":\"2\",\n"
-                    + " \"result\": []}")
+            """
+                {"jsonrpc":"2.0",
+                "id":"2",
+                "result": []}
+            """.trimIndent()
         )
         val result = handler.deserializeResult("foo", (message as ResponseMessage.Result).result) as List<Entry>
 
@@ -140,201 +157,23 @@ class MessageJsonHandlerTest {
         assertEquals(expected, actual)
     }
 
-//    @Test
-//    fun testSerializeImmutableList() {
-//        val handler = MessageJsonHandler(Json.Default, emptyMap())
-//        val list = listOf("a", "b")
-//        handler.serializeParams("foo", list)
-//        val message = NotificationMessage("foo", list)
-//        val json: String = handler.serialize(message)
-//        assertEquals("{\"jsonrpc\":\"2.0\",\"method\":\"foo\",\"params\":[\"a\",\"b\"]}", json)
-//    }
-//
-//    @Test
-//    fun testEither_01() {
-//        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
-//        supportedMethods["foo"] = JsonRpcMethod.request("foo",
-//            typeOf<Either<String, List<Map<String, String>>>>(),
-//            typeOf<Either<String, Int>>()
-//        )
-//        val handler = MessageJsonHandler(Json.Default, supportedMethods)
-//
-//        var message: Message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + " \"result\": [\n"
-//                    + "  {\"name\":\"foo\"},\n"
-//                    + "  {\"name\":\"bar\"}\n"
-//                    + "]}")
-//        )
-//        var result: Either<String, List<Map<String, String>>> =
-//            (message as ResponseMessage).result as Either<String, List<Map<String, String>>>
-//        assertTrue(result.isRight())
-//        for (e: Map<String, String> in result.getOrNull()!!) {
-//            assertNotNull(e["name"])
-//        }
-//        message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"result\": \"name\"\n"
-//                    + "}")
-//        )
-//        result = (message as ResponseMessage).result as Either<String, List<Map<String, String>>>
-//        assertFalse(result.isRight())
-//        assertEquals("name", result.leftOrNull()!!)
-//    }
-//
-//    @Test
-//    fun testEither_02() {
-//        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
-//        supportedMethods["foo"] = JsonRpcMethod.request("foo",
-//            typeOf<Either<MyEnum, Map<String, String>>>(),
-//            typeOf<Any>()
-//        )
-//        val handler = MessageJsonHandler(Json.Default, supportedMethods)
-//
-//        val message: Message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"result\": 2\n"
-//                    + "}")
-//        )
-//        val result: Either<MyEnum, List<Map<String, String>>> =
-//            (message as ResponseMessage).result as Either<MyEnum, List<Map<String, String>>>
-//        assertTrue(result.isLeft())
-//        assertEquals(MyEnum.B, result.leftOrNull()!!)
-//    }
-//
-//    @Test
-//    fun testEither_03() {
-//        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
-//        supportedMethods["foo"] = JsonRpcMethod.request("foo",
-//            typeOf<Either<Either<MyEnum, Map<String, String>>, List<Either<MyEnum, Map<String, String>>>>>(),
-//            typeOf<Any>()
-//        )
-//        val handler = MessageJsonHandler(Json.Default, supportedMethods)
-//
-//        var message: Message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"result\": 2\n"
-//                    + "}")
-//        )
-//        var result: Either<Either<MyEnum, Map<String, String>>, List<Either<MyEnum, Map<String, String>>>> =
-//            (message as ResponseMessage).result as Either<Either<MyEnum, Map<String, String>>, List<Either<MyEnum, Map<String, String>>>>
-//        assertTrue(result.isLeft())
-//        assertTrue(result.leftOrNull()!!.isLeft())
-//        assertEquals(MyEnum.B, result.leftOrNull()!!.leftOrNull()!!)
-//        message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + " \"result\": {\n"
-//                    + "  \"foo\":\"1\",\n"
-//                    + "  \"bar\":\"2\"\n"
-//                    + "}}")
-//        )
-//        result =
-//            (message as ResponseMessage).result as Either<Either<MyEnum, Map<String, String>>, List<Either<MyEnum, Map<String, String>>>>
-//        assertTrue(result.isLeft())
-//        assertTrue(result.leftOrNull()!!.isRight())
-//        assertEquals("1", result.leftOrNull()!!.getOrNull()!!.get("foo"))
-//        assertEquals("2", result.leftOrNull()!!.getOrNull()!!.get("bar"))
-//        message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + " \"result\": [{\n"
-//                    + "  \"foo\":\"1\",\n"
-//                    + "  \"bar\":\"2\"\n"
-//                    + "}]}")
-//        )
-//        result =
-//            (message as ResponseMessage).result as Either<Either<MyEnum, Map<String, String>>, List<Either<MyEnum, Map<String, String>>>>
-//        assertTrue(result.isRight())
-//        assertTrue(result.getOrNull()!!.get(0).isRight())
-//        assertEquals("1", result.getOrNull()!!.get(0).getOrNull()!!.get("foo"))
-//        assertEquals("2", result.getOrNull()!!.get(0).getOrNull()!!.get("bar"))
-//        message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + " \"result\": [\n"
-//                    + "  2\n"
-//                    + "]}")
-//        )
-//        result =
-//            (message as ResponseMessage).result as Either<Either<MyEnum, Map<String, String>>, List<Either<MyEnum, Map<String, String>>>>
-//        assertTrue(result.isRight())
-//        assertTrue(result.getOrNull()!!.get(0).isLeft())
-//        assertEquals(MyEnum.B, result.getOrNull()!!.get(0).leftOrNull()!!)
-//    }
-//
-//    @Test
-//    fun testEither_04() {
-//        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
-//        supportedMethods["foo"] = JsonRpcMethod.request("foo",
-//            typeOf<Either<MyClass, List<MyClass>>>(),
-//            typeOf<Any>()
-//        )
-//        val handler = MessageJsonHandler(Json.Default, supportedMethods)
-//
-//        var message: Message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"result\": {\n"
-//                    + "  value:\"foo\"\n"
-//                    + "}}")
-//        )
-//        var result: Either<MyClass, List<MyClass>> =
-//            (message as ResponseMessage).result as Either<MyClass, List<MyClass>>
-//        assertTrue(result.isLeft())
-//        assertEquals("foo", result.leftOrNull()!!.value)
-//        message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"result\": [{\n"
-//                    + "  value:\"bar\"\n"
-//                    + "}]}")
-//        )
-//        result = (message as ResponseMessage).result as Either<MyClass, List<MyClass>>
-//        assertTrue(result.isRight())
-//        assertEquals("bar", result.getOrNull()!!.get(0).value)
-//    }
-//
-//    @Test
-//    fun testEither_05() {
-//        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
-//        supportedMethods["foo"] = JsonRpcMethod.request("foo",
-//            typeOf<Either<List<MyClass>, MyClassList>>(),
-//            typeOf<Any>()
-//        )
-//        val handler = MessageJsonHandler(Json.Default, supportedMethods)
-//
-//        var message: Message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"result\": [{\n"
-//                    + "  value:\"foo\"\n"
-//                    + "}]}")
-//        )
-//        var result: Either<List<MyClass>, MyClassList> =
-//            (message as ResponseMessage).result as Either<List<MyClass>, MyClassList>
-//        assertTrue(result.isLeft())
-//        assertEquals("foo", result.leftOrNull()!!.get(0).value)
-//        message = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"result\": {\n"
-//                    + "  items: [{\n"
-//                    + "    value:\"bar\"\n"
-//                    + "}]}}")
-//        )
-//        result = (message as ResponseMessage).result as Either<List<MyClass>, MyClassList>
-//        assertTrue(result.isRight())
-//        assertEquals("bar", result.getOrNull()!!.items.get(0).value)
-//    }
+    @Test
+    fun `serialize notification with list params`() {
+        val handler = MessageJsonHandler(
+            Json.Default,
+            mapOf("foo" to JsonRpcMethod.notification("foo", typeOf<String>(), typeOf<String>()))
+        )
+        val list = listOf("a", "b")
+        val params = handler.serializeParams("foo", list)
+        val message = NotificationMessage("foo", params)
+        val actual = Json.parseToJsonElement(handler.serializeMessage(message))
+        val expected = Json.parseToJsonElement("""{"jsonrpc":"2.0","method":"foo","params":["a","b"]}""")
+        assertEquals(expected, actual)
+    }
 
     @Test
     fun testParamsParsing_01() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -356,7 +195,7 @@ class MessageJsonHandlerTest {
     // Arguments can be in any order
     @Test
     fun testParamsParsing_02() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -375,30 +214,9 @@ class MessageJsonHandlerTest {
         assertTrue(params[0] is Location)
     }
 
-//    // Parameters are parsed as JsonObject if the method is not known
-//    @Test
-//    fun testParamsParsing_03() {
-//        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
-//        supportedMethods["foo"] = JsonRpcMethod.request("foo",
-//            typeOf<Void>(),
-//            typeOf<Location>()
-//        )
-//        val handler = MessageJsonHandler(Json.Default, supportedMethods)
-//
-//        val message: RequestMessage = handler.parseMessage(
-//            ("{\"jsonrpc\":\"2.0\","
-//                    + "\"id\":\"2\",\n"
-//                    + "\"method\":\"bar\",\n"
-//                    + "\"params\": {\"uri\": \"dummy://mymodel.mydsl\"}\n"
-//                    + "}")
-//        ) as RequestMessage
-//        val params = handler.deserializeParams("foo", params)
-//        assertTrue(params is JsonObject)
-//    }
-
     @Test
-    fun testParamsParsing_04() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    fun testParamsParsing_03() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -407,18 +225,19 @@ class MessageJsonHandlerTest {
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
         val message: RequestMessage = handler.deserializeMessage(
-            ("{\"jsonrpc\":\"2.0\","
-                    + "\"id\":\"2\",\n"
-                    + "\"method\":\"bar\",\n"
-                    + "\"params\": null\n"
-                    + "}")
+            """
+                {"jsonrpc":"2.0",
+                "id":"2",
+                "method":"foo",
+                "params": null}
+            """.trimIndent()
         ) as RequestMessage
         assertEquals(null, message.params)
     }
 
     @Test
     fun testRawMultiParamsParsing_01() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -428,11 +247,12 @@ class MessageJsonHandlerTest {
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
         val message: RequestMessage = handler.deserializeMessage(
-            ("{\"jsonrpc\":\"2.0\","
-                    + "\"id\":\"2\",\n"
-                    + "\"method\":\"foo\",\n"
-                    + "\"params\": [\"foo\", 2]\n"
-                    + "}")
+            """
+                {"jsonrpc":"2.0",
+                "id":"2",
+                "method":"foo",
+                "params": ["foo", 2]}
+            """.trimIndent()
         ) as RequestMessage
         val params = handler.deserializeParams(message)
         assertEquals(2, params.size)
@@ -442,7 +262,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testRawMultiParamsParsing_02() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["bar"] = JsonRpcMethod.request(
             "bar",
             typeOf<Void>(),
@@ -465,7 +285,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testRawMultiParamsParsing_03() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -491,7 +311,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testRawMultiParamsParsing_04() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -518,7 +338,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testMultiParamsParsing_01() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -565,7 +385,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testMultiParamsParsing_03() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -593,7 +413,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testMultiParamsParsing_04() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -621,7 +441,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testEnumParam() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -649,7 +469,7 @@ class MessageJsonHandlerTest {
 
     @Test
     fun testEnumParamNull() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -728,7 +548,7 @@ class MessageJsonHandlerTest {
             val json: StringBuilder = StringBuilder()
             json.append("{")
             for (k in mutatedProperties.indices) {
-                json.append(mutatedProperties.get(k))
+                json.append(mutatedProperties[k])
                 if (k != mutatedProperties.size - 1) {
                     json.append(",")
                 }
@@ -739,9 +559,7 @@ class MessageJsonHandlerTest {
                 test.accept(jsonString)
             } catch (e: Exception) {
                 // To make it easier to debug a failing test, add another exception
-                // layer that shows the version of the json used -- you may
-                // need to turn off "Filter Stack Trace" in JUnit view in Eclipse
-                // to see the underlying error.
+                // layer that shows the version of the json used
                 throw AssertionError("Failed with this input json: $jsonString", e)
             } catch (e: AssertionError) {
                 throw AssertionError("Failed with this input json: $jsonString", e)
@@ -750,7 +568,7 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testThePermutationsTest() {
+    fun `test testAllPermutations`() {
         // make sure that the testAllPermutations works as expected
         val collectedPermutations: MutableSet<String> = HashSet()
         val expectedPermutations: MutableSet<String> = HashSet()
@@ -767,8 +585,8 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testRequest_AllOrders() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    fun `parse request json in any order`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -794,8 +612,8 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testNormalResponse_AllOrders() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    fun `parse response json in any order`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Location>(),
@@ -803,7 +621,7 @@ class MessageJsonHandlerTest {
         )
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
-        val properties = arrayOf<String>(
+        val properties = arrayOf(
             "\"jsonrpc\":\"2.0\"",
             "\"id\":2",
             "\"result\": {\"uri\": \"dummy://mymodel.mydsl\"}"
@@ -814,14 +632,14 @@ class MessageJsonHandlerTest {
 
             assertEquals(
                 "dummy://mymodel.mydsl",
-                (result as Location).uri
+                result.uri
             )
         }
     }
 
     @Test
-    fun testErrorResponse_AllOrders() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    fun `parse error response json in any order`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Location>(),
@@ -844,8 +662,8 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testNotification_AllOrders() {
-        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap<String, JsonRpcMethod>()
+    fun `parse notification json in any order`() {
+        val supportedMethods: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         supportedMethods["foo"] = JsonRpcMethod.request(
             "foo",
             typeOf<Void>(),
@@ -870,7 +688,7 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testWrapPrimitive_JsonRpc2_0() {
+    fun `serialize array params with a single element`() {
         val handler: MessageJsonHandler = createSimpleRequestHandler(
             typeOf<String>(),
             typeOf<String>()
@@ -898,20 +716,22 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testUnwrapPrimitive_JsonRpc2_0() {
+    fun `parse array params with a single element`() {
         val handler: MessageJsonHandler = createSimpleRequestHandler(
             typeOf<String>(),
             typeOf<String>()
         )
 
-        val request = ("{\n"
-                + "  \"jsonrpc\": \"2.0\",\n"
-                + "  \"id\": 1,\n"
-                + "  \"method\": \"testMethod\",\n"
-                + "  \"params\": [\n"
-                + "      \"param\"\n"
-                + "  ]\n"
-                + "}")
+        val request = """
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "testMethod",
+                "params": [
+                    "param"
+                ]
+            }
+        """.trimIndent()
         // Check parse - unwrap primitive
         val message: RequestMessage = handler.deserializeMessage(request) as RequestMessage
         val params = handler.deserializeParams(message)
@@ -919,7 +739,7 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testWrapArray_JsonRpc2_0() {
+    fun `wrap array`() {
         val handler: MessageJsonHandler =
             createSimpleRequestHandler(typeOf<String>(), typeOf<List<Boolean>>())
         val request = RequestMessage(
@@ -952,19 +772,22 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testUnwrapArray_JsonRpc2_0() {
+    fun `unwrap array`() {
         val handler: MessageJsonHandler =
             createSimpleRequestHandler(typeOf<String>(), typeOf<List<Boolean>>())
-        val request = ("{\n"
-                + "  \"jsonrpc\": \"2.0\",\n"
-                + "  \"id\": 1,\n"
-                + "  \"method\": \"testMethod\",\n"
-                + "  \"params\": [\n"
-                + "    [\n"
-                + "      true, false\n"
-                + "    ]\n"
-                + "  ]\n"
-                + "}")
+        val request = """
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "testMethod",
+                "params": [
+                    [
+                        true,
+                        false
+                    ]
+                ]
+            }
+        """.trimIndent()
         val message: RequestMessage = handler.deserializeMessage(request) as RequestMessage
 
         // Check parse - unwrap array
@@ -973,7 +796,7 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testWrapMultipleParams_JsonRpc2_0() {
+    fun `serialize array params`() {
         val handler: MessageJsonHandler = createSimpleRequestHandler(
             typeOf<String>(),
             typeOf<Boolean>(),
@@ -996,7 +819,7 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testUnwrapMultipleParams_JsonRpc2_0() {
+    fun `deserialize array params`() {
         val handler: MessageJsonHandler = createSimpleRequestHandler(
             typeOf<String>(),
             typeOf<Boolean>(),
@@ -1020,7 +843,7 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testWrapMultipleParamsWithArray_JsonRpc2_0() {
+    fun `serialize array params with a list param`() {
         val handler: MessageJsonHandler = createSimpleRequestHandler(
             typeOf<String>(), typeOf<List<Boolean>>(),
             typeOf<String>()
@@ -1042,7 +865,7 @@ class MessageJsonHandlerTest {
     }
 
     @Test
-    fun testUnwrapMultipleParamsWithArray_JsonRpc2_0() {
+    fun `deserialize array params with a list param`() {
         val handler: MessageJsonHandler = createSimpleRequestHandler(
             typeOf<String>(), typeOf<List<Boolean>>(),
             typeOf<String>()
@@ -1078,8 +901,7 @@ class MessageJsonHandlerTest {
 
         private fun createSimpleRequestHandler(returnType: KType, vararg paramType: KType): MessageJsonHandler {
             val requestMethod: JsonRpcMethod = JsonRpcMethod.request("testMethod", returnType, *paramType)
-            val handler = MessageJsonHandler(Json.Default, mapOf(Pair(requestMethod.methodName, requestMethod)))
-            return handler
+            return MessageJsonHandler(Json, mapOf(Pair(requestMethod.methodName, requestMethod)))
         }
     }
 }

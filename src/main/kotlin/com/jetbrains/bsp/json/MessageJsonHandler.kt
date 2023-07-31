@@ -41,6 +41,7 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
     fun <T> deserialize(jsonElement: JsonElement, type: KType): T {
         return deserialize(jsonElement, json.serializersModule.serializer(type)) as T
     }
@@ -80,11 +81,11 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
                     else -> JsonParams.ArrayParams(JsonArray(listOf(jsonElement)))
                 }
             }
-
             else -> {
-                // TODO use correct serializers for each parameter
-                val jsonElement = serialize(params, typeOf<Any>())
-                JsonParams.ArrayParams(jsonElement.jsonArray)
+                val list = params.zip(jsonRpcMethod.parameterTypes).map {
+                    serialize(it.first, it.second)
+                }
+                JsonParams.ArrayParams(JsonArray(list))
             }
         }
     }

@@ -14,6 +14,7 @@ object ServiceEndpoints {
      *
      * @return the wrapped service object
      */
+    @Suppress("UNCHECKED_CAST")
     fun <T : Any> toServiceObject(endpoint: Endpoint, interface_: KClass<T>): T {
         val interfArray = arrayOf<Class<*>>(interface_.java, Endpoint::class.java)
         val invocationHandler = EndpointProxy(endpoint, interface_)

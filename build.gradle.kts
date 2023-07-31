@@ -1,11 +1,11 @@
 plugins {
     kotlin("jvm") version "1.9.0"
     kotlin("plugin.serialization") version "1.9.0"
-    application
+    `maven-publish`
 }
 
 group = "org.jetbrains.bsp"
-version = "1.0-SNAPSHOT"
+version = "0.0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -27,6 +27,10 @@ kotlin {
     jvmToolchain(11)
 }
 
-application {
-    mainClass.set("MainKt")
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+        }
+    }
 }

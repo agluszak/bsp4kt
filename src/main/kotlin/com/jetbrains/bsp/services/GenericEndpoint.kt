@@ -74,6 +74,7 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
             return handler.apply(params)!!
         }
 
+        // TODO: remove
         // Create a log message about the unsupported method
         val message = "Unsupported request method: $method"
         if (isOptionalMethod(method)) {

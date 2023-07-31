@@ -60,7 +60,6 @@ class StreamMessageProducer(
                             } else {
                                 val result = handleMessage(input, headers, messageConsumer)
                                 if (!result) keepRunning = false
-                                newLine = false
                             }
                             headers = Headers()
                             debugBuilder = null

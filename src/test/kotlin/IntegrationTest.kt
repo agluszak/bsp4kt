@@ -313,7 +313,7 @@ class IntegrationTest {
                     tries++
                     throw UnsupportedOperationException()
                 }
-                return CompletableFutures.computeAsync(executor) { cancelToken ->
+                return CompletableFutures.computeAsync(executor) {
                     if (tries++ == 1) throw UnsupportedOperationException()
                     param
                 }

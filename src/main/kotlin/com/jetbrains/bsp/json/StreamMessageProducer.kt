@@ -8,6 +8,7 @@ import kotlinx.serialization.SerializationException
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
+import java.io.UnsupportedEncodingException
 import java.nio.charset.StandardCharsets
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -20,15 +21,14 @@ import kotlin.reflect.jvm.jvmName
 class StreamMessageProducer(
     var input: InputStream,
     private val jsonHandler: MessageJsonHandler,
-    private val issueHandler: MessageIssueHandler? = null
 ) : MessageProducer, Closeable {
 
     private var keepRunning = false
 
-    protected class Headers() {
-        var contentLength = -1
-        var charset = StandardCharsets.UTF_8.name()
-    }
+    data class Headers(
+        var contentLength: Int = -1,
+        var charset: String = StandardCharsets.UTF_8.name()
+    )
 
     override fun listen(messageConsumer: MessageConsumer) {
         if (keepRunning) {
@@ -52,7 +52,7 @@ class StreamMessageProducer(
                         if (newLine) {
                             // Two consecutive newlines have been read, which signals the start of the message content
                             if (headers.contentLength < 0) {
-                                fireError(
+                                logError(
                                     IllegalStateException(
                                         ("Missing header $CONTENT_LENGTH_HEADER in input \"$debugBuilder\"")
                                     )
@@ -77,21 +77,25 @@ class StreamMessageProducer(
                         newLine = false
                     }
                 }
-            } // while (keepRunning)
+            }
         } catch (exception: IOException) {
             if (JsonRpcException.indicatesStreamClosed(exception)) {
                 // Only log the error if we had intended to keep running
-                if (keepRunning) fireStreamClosed(exception)
+                if (keepRunning) logStreamClosed(exception)
             } else throw JsonRpcException(exception)
         } finally {
             keepRunning = false
         }
     }
 
+    private fun logException(exception: Exception) {
+        LOG.log(Level.WARNING, "An error occurred while processing an incoming message", exception)
+    }
+
     /**
      * Log an error.
      */
-    protected fun fireError(error: Throwable) {
+    private fun logError(error: Throwable) {
         val message =
             if (error.message != null) error.message else "An error occurred while processing an incoming message."
         LOG.log(Level.SEVERE, message, error)
@@ -100,7 +104,7 @@ class StreamMessageProducer(
     /**
      * Report that the stream was closed through an exception.
      */
-    protected fun fireStreamClosed(cause: Exception) {
+    private fun logStreamClosed(cause: Exception) {
         val message = if (cause.message != null) cause.message else "The input stream was closed."
         LOG.log(Level.INFO, message, cause)
     }
@@ -108,7 +112,7 @@ class StreamMessageProducer(
     /**
      * Parse a header attribute and set the corresponding data in the [Headers] fields.
      */
-    protected fun parseHeader(line: String, headers: Headers) {
+    private fun parseHeader(line: String, headers: Headers) {
         val sepIndex = line.indexOf(':')
         if (sepIndex >= 0) {
             val key = line.substring(0, sepIndex).trim { it <= ' ' }
@@ -116,7 +120,7 @@ class StreamMessageProducer(
                 CONTENT_LENGTH_HEADER -> try {
                     headers.contentLength = line.substring(sepIndex + 1).trim { it <= ' ' }.toInt()
                 } catch (e: NumberFormatException) {
-                    fireError(e)
+                    logError(e)
                 }
 
                 CONTENT_TYPE_HEADER -> {
@@ -133,7 +137,7 @@ class StreamMessageProducer(
      * @return `true` if we should continue reading from the input stream, `false` if we should stop
      */
     @Throws(IOException::class)
-    protected fun handleMessage(input: InputStream, headers: Headers, messageConsumer: MessageConsumer): Boolean {
+    private fun handleMessage(input: InputStream, headers: Headers, messageConsumer: MessageConsumer): Boolean {
         try {
             val contentLength = headers.contentLength
             val buffer = ByteArray(contentLength)
@@ -144,20 +148,17 @@ class StreamMessageProducer(
                 bytesRead += readResult
             }
             val content = String(buffer, charset(headers.charset))
-            try {
-                val message: Message = jsonHandler.parseMessage(content)
-                messageConsumer.consume(message)
-            } catch (exception: MessageIssueException) {
-                // An issue was found while parsing or validating the message
-                if (issueHandler != null) issueHandler.handleIssues(
-                    exception.rpcMessage, exception.issues
-                ) else fireError(exception)
-            }
-        } catch (exception: Exception) {
+            val message: Message = jsonHandler.deserializeMessage(content)
+            messageConsumer.consume(message)
+        } catch (e: UnsupportedEncodingException) {
             // UnsupportedEncodingException can be thrown by String constructor
-            // JsonParseException can be thrown by jsonHandler
-            // We also catch arbitrary exceptions that are thrown by message consumers in order to keep this thread alive
-            fireError(exception)
+            logException(e)
+        } catch (e: SerializationException) {
+            // SerializationException can be thrown by jsonHandler
+            logException(e)
+        } catch (e: Exception) {
+            // We catch arbitrary exceptions that are thrown by message consumers in order to keep this thread alive
+            logError(e)
         }
         return true
     }

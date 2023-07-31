@@ -1,10 +1,8 @@
 
 package com.jetbrains.bsp.messages
 
-import com.jetbrains.bsp.MessageIssueException
 import com.jetbrains.bsp.messages.Message.Companion.JSONRPC_VERSION
 import kotlinx.serialization.*
-import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -85,11 +83,15 @@ sealed interface Message {
 sealed interface MessageId {
     @Serializable
     @JvmInline
-    value class NumberId(val id: Int) : MessageId
+    value class NumberId(val id: Int) : MessageId {
+        override fun toString(): String = id.toString()
+    }
 
     @Serializable
     @JvmInline
-    value class StringId(val id: String) : MessageId
+    value class StringId(val id: String) : MessageId {
+        override fun toString(): String = "\"$id\""
+    }
 
 
     companion object : JsonContentPolymorphicSerializer<MessageId>(MessageId::class) {
@@ -153,14 +155,32 @@ fun ensureJsonRpcVersion(json: JsonObject) {
     } ?: throw SerializationException("Expected a jsonrpc property")
 }
 
-@Serializable
-data class NotificationMessage(val method: String, val params: JsonParams? = null) : Message
+sealed interface IncomingMessage : Message {
+    val method: String
+    val params: JsonParams?
+}
 
 @Serializable
-data class RequestMessage(val id: MessageId, val method: String, val params: JsonParams? = null) : Message
+data class NotificationMessage(override val method: String, override val params: JsonParams? = null) : IncomingMessage
 
 @Serializable
-data class ResponseError(val code: Int, val message: String, val data: JsonElement? = null)
+data class RequestMessage(val id: MessageId, override val method: String, override val params: JsonParams? = null) : IncomingMessage
+
+@Serializable
+data class ResponseError(val code: Int, val message: String, val data: JsonElement? = null) {
+    companion object {
+        fun fromException(exception: Exception): ResponseError {
+            when (exception) {
+                is SerializationException -> {
+                    return ResponseError(ResponseErrorCode.ParseError.code, "Error during serialization: " + exception.message)
+                }
+                else -> {
+                    return ResponseError(ResponseErrorCode.InternalError.code, "Internal error: " + exception.message)
+                }
+            }
+        }
+    }
+}
 
 
 @Serializable(with = ResponseMessage.Companion::class)

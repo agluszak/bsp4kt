@@ -5,7 +5,7 @@ package com.jetbrains.bsp.messages
  * [-32099..-32000]: JSON-RPC reserved error codes
  * [-32899..-32800]: LSP reserved error codes
  */
-enum class ResponseErrorCode(val value: Int) {
+enum class ResponseErrorCode(val code: Int) {
 
 
     /**

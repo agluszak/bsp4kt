@@ -16,9 +16,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.2")
     implementation("org.jetbrains.kotlin:kotlin-reflect:1.9.0")
     implementation(kotlin("stdlib"))
-}
-
-dependencies {
     testImplementation(kotlin("test"))
 }
 

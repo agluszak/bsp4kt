@@ -42,7 +42,7 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
                             // Take as many as there are parameters and log a warning for the rest
                             args.take(parameterCount).also {
                                 val unexpectedArgs = args.drop(parameterCount)
-                                LOG.warning("Unexpected params '$unexpectedArgs' for '$method' are ignored")
+                                LOG.warning("Unexpected additional params '$unexpectedArgs' for '$method' are ignored")
                                 }
                         }
 
@@ -82,7 +82,7 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
         }
         LOG.log(Level.WARNING, message)
         val exceptionalResult: CompletableFuture<*> = CompletableFuture<Any>()
-        val error = ResponseError(ResponseErrorCode.MethodNotFound.value, message, null)
+        val error = ResponseError(ResponseErrorCode.MethodNotFound.code, message, null)
         exceptionalResult.completeExceptionally(ResponseErrorException(error))
         return exceptionalResult
     }
@@ -95,12 +95,10 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
             return
         }
 
-        // Create a log message about the unsupported method
-        val message = "Unsupported notification method: $method"
         if (isOptionalMethod(method)) {
-            LOG.log(Level.INFO, message)
+            LOG.info { "Unsupported optional notification method: $method"}
         } else {
-            LOG.log(Level.WARNING, message)
+            LOG.warning("Unsupported notification method: $method")
         }
     }
 

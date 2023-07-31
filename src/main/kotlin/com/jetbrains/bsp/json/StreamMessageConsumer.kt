@@ -27,7 +27,7 @@ class StreamMessageConsumer(
 
     override fun consume(message: Message) {
         try {
-            val content = jsonHandler.serialize(message)
+            val content = jsonHandler.serializeMessage(message)
             val contentBytes = content.toByteArray(charset(encoding))
             val contentLength = contentBytes.size
             val header = getHeader(contentLength)

@@ -25,13 +25,14 @@ import kotlin.reflect.jvm.jvmName
  * @param localEndpoint - the local service implementation
  * @param exceptionHandler - an exception handler that should never return null.
  */
+
 class RemoteEndpoint(
     private val out: MessageConsumer,
     private val localEndpoint: Endpoint,
     private val jsonHandler: MessageJsonHandler,
-    private val exceptionHandler: Function<Throwable, ResponseError> = DEFAULT_EXCEPTION_HANDLER
+    private val exceptionHandler: Function<Throwable, ResponseError> = DEFAULT_EXCEPTION_HANDLER,
 ) :
-    Endpoint, MessageConsumer, MessageIssueHandler, MethodProvider {
+    Endpoint, MessageConsumer, MethodProvider {
     private val nextRequestId = AtomicInteger()
     private val sentRequestMap: MutableMap<MessageId, PendingRequestInfo> = LinkedHashMap()
     private val receivedRequestMap: MutableMap<MessageId, CompletableFuture<*>> = LinkedHashMap()
@@ -48,13 +49,20 @@ class RemoteEndpoint(
      * Send a notification to the remote endpoint.
      */
     override fun notify(method: String, params: List<Any?>) {
-        val serializedParams = jsonHandler.serializeParams(method, params)
-        val notificationMessage = NotificationMessage(method, serializedParams)
         try {
+            val serializedParams = jsonHandler.serializeParams(method, params)
+            val notificationMessage = NotificationMessage(method, serializedParams)
+
             out.consume(notificationMessage)
-        } catch (exception: Exception) {
-            val logLevel = if (JsonRpcException.indicatesStreamClosed(exception)) Level.INFO else Level.WARNING
-            LOG.log(logLevel, "Failed to send notification message.", exception)
+        } catch (e: MessageIssueException) {
+            LOG.log(Level.WARNING, "Error while processing the message", e)
+        } catch (e: Exception) {
+            val level = if (JsonRpcException.indicatesStreamClosed(e)) {
+                Level.INFO
+            } else {
+                Level.WARNING
+            }
+            LOG.log(level, "Failed to send notification message", e)
         }
     }
 
@@ -122,10 +130,7 @@ class RemoteEndpoint(
         synchronized(sentRequestMap) { requestInfo = sentRequestMap.remove(responseMessage.id) }
         if (requestInfo == null) {
             // We have no pending request information that matches the id given in the response
-            LOG.log(
-                Level.WARNING,
-                "Unmatched response message: $responseMessage"
-            )
+            LOG.info { "Unmatched response message: $responseMessage" }
         } else when (responseMessage) {
             is ResponseMessage.Error ->
                 // The remote service has replied with an error
@@ -133,24 +138,50 @@ class RemoteEndpoint(
 
             is ResponseMessage.Result -> {
                 // The remote service has replied with a result object
-                val deserialized = jsonHandler.deserializeResult(requestInfo!!.requestMessage.method, responseMessage.result)
-                requestInfo!!.future.complete(deserialized)
+                try {
+                    val deserialized =
+                        jsonHandler.deserializeResult(requestInfo!!.requestMessage.method, responseMessage.result)
+                    requestInfo!!.future.complete(deserialized)
+                } catch (exception: MessageIssueException) {
+                    requestInfo!!.future.completeExceptionally(exception)
+                    return
+                }
+
             }
         }
     }
 
+    private val Message.name: String
+        get() = when (this) {
+            is NotificationMessage -> "Notification"
+            is RequestMessage -> "Request"
+            is ResponseMessage -> "Response"
+        }
+
+    private fun logMessageIssue(message: Message, exception: MessageIssueException) {
+        LOG.warning { "${message.name} could not be handled: $message. ${exception.issue.message}" }
+    }
+
+    private fun logError(message: Message, exception: Throwable) {
+        LOG.log(Level.SEVERE, "${message.name} threw an exception: ${exception.message}", exception)
+    }
+
     private fun handleNotification(notificationMessage: NotificationMessage) {
-        val params = jsonHandler.deserializeParams(notificationMessage.method, notificationMessage.params)
-        if (!handleCancellation(notificationMessage, params)) {
-            // Forward the notification to the local endpoint
-            try {
+        try {
+            val params = jsonHandler.deserializeParams(notificationMessage)
+            if (!handleCancellation(notificationMessage, params)) {
+                // Forward the notification to the local endpoint
                 localEndpoint.notify(notificationMessage.method, params)
-            } catch (exception: Exception) { // TODO: error handling
-                LOG.log(
-                    Level.WARNING,
-                    "Notification threw an exception: $notificationMessage", exception
-                )
             }
+        } catch (e: MessageIssueException) {
+            if (e.issue is NoSuchMethod && isOptional(notificationMessage)) {
+                // The remote service has sent a notification for a method that is not implemented by the local endpoint
+                LOG.info { "Ignoring optional notification: $notificationMessage" }
+            } else {
+                logMessageIssue(notificationMessage, e)
+            }
+        } catch (exception: Throwable) {
+            logError(notificationMessage, exception)
         }
     }
 
@@ -168,27 +199,39 @@ class RemoteEndpoint(
                     synchronized(receivedRequestMap) {
                         val id = cancelParam.id
                         val future = receivedRequestMap[id]
-                        future?.cancel(true) ?: LOG.warning("Unmatched cancel notification for request id $id")
+                        future?.cancel(true) ?: LOG.info { "Unmatched cancel notification for request id $id" }
                     }
                     return true
                 } else {
-                    LOG.warning("Cancellation support is disabled, since the '${MessageJsonHandler.CANCEL_METHOD.methodName}' method has been registered explicitly.")
+                    LOG.info { "Cancellation support is disabled, since the '${MessageJsonHandler.CANCEL_METHOD.methodName}' method has been registered explicitly." }
                 }
             } else {
-                LOG.warning("Missing 'params' attribute of cancel notification.")
+                LOG.warning { "Missing 'params' attribute of cancel notification." }
             }
         }
         return false
     }
 
+    private fun isOptional(message: IncomingMessage): Boolean =
+        message.method.startsWith("$/")
+
     private fun handleRequest(requestMessage: RequestMessage) {
+        var future: CompletableFuture<*>
         val messageId = requestMessage.id
-        val params = jsonHandler.deserializeParams(requestMessage.method, requestMessage.params)
-        val future: CompletableFuture<*>
         try {
+            val params = jsonHandler.deserializeParams(requestMessage)
             // Forward the request to the local endpoint
             future = localEndpoint.request(requestMessage.method, params)
-        } catch (throwable: Throwable) { // TODO error handling
+        } catch (e: MessageIssueException) {
+            if (e.issue is NoSuchMethod && isOptional(requestMessage)) {
+                LOG.info { "Ignoring optional request: $requestMessage" }
+            } else {
+                logMessageIssue(requestMessage, e)
+                // There was an issue with the request - reply with an error response
+            }
+            out.consume(ResponseMessage.Error(messageId, e.issue.toErrorResponse()))
+            return
+        } catch (throwable: Throwable) {
             // The local endpoint has failed handling the request - reply with an error response
             val errorObject: ResponseError = exceptionHandler.apply(throwable)
             out.consume(ResponseMessage.Error(messageId, errorObject))
@@ -197,21 +240,29 @@ class RemoteEndpoint(
 
         synchronized(receivedRequestMap) { receivedRequestMap.put(messageId, future) }
         future.thenAccept { result: Any? ->
-            val serializedResult = jsonHandler.serializeResult(requestMessage.method, result)
-            // Reply with the result object that was computed by the local endpoint
-            out.consume(ResponseMessage.Result(messageId, serializedResult))
+            try {
+                val serializedResult = jsonHandler.serializeResult(requestMessage.method, result)
+                // Reply with the result object that was computed by the local endpoint
+                out.consume(ResponseMessage.Result(messageId, serializedResult))
+            } catch (e: MessageIssueException) {
+                logMessageIssue(requestMessage, e)
+                // There was an issue with the request - reply with an error response
+                out.consume(ResponseMessage.Error(messageId, e.issue.toErrorResponse()))
+            }
         }.exceptionally { t: Throwable ->
-            // The local endpoint has failed computing a result - reply with an error response
-            val responseMessage = if (isCancellation(t)) {
+            val errorObject = if (isCancellation(t)) {
                 val message =
                     "The request (id: " + messageId + ", method: '" + requestMessage.method + "') has been cancelled"
-                val errorObject = ResponseError(ResponseErrorCode.RequestCancelled.value, message, null)
-                ResponseMessage.Error(messageId, errorObject)
+                ResponseError(ResponseErrorCode.RequestCancelled.code, message, null)
+            } else if (t is MessageIssueException) {
+                // There was an issue with the request - reply with an error response
+                t.issue.toErrorResponse()
             } else {
-                val errorObject: ResponseError = exceptionHandler.apply(t)
-                ResponseMessage.Error(messageId, errorObject)
+                // The local endpoint has failed to compute a result - reply with an error response
+                exceptionHandler.apply(t)
             }
-            out.consume(responseMessage)
+            val response = ResponseMessage.Error(messageId, errorObject)
+            out.consume(response)
             null
         }.thenApply<Any?> {
             synchronized(receivedRequestMap) { receivedRequestMap.remove(messageId) }
@@ -219,66 +270,6 @@ class RemoteEndpoint(
         }
     }
 
-    override fun handleIssues(message: Message?, issues: List<MessageIssue>) {
-        require(issues.isNotEmpty()) { "The list of issues must not be empty." }
-        when (message) {
-            is RequestMessage -> {
-                handleRequestIssues(message, issues)
-            }
-
-            is ResponseMessage -> {
-                handleResponseIssues(message, issues)
-            }
-
-            else -> {
-                logIssues(message, issues)
-            }
-        }
-    }
-
-    private fun logIssues(message: Message?, issues: List<MessageIssue>) {
-        val messageName = if (message == null) "message" else message.javaClass.simpleName
-        for (issue in issues) {
-            val logMessage = "Issue found in " + messageName + ": " + issue.text
-            LOG.log(Level.WARNING, logMessage, issue.cause)
-        }
-    }
-
-    private fun handleRequestIssues(requestMessage: RequestMessage, issues: List<MessageIssue>) {
-        val requestId = requestMessage.id
-        val errorObject =
-            if (issues.size == 1) {
-                val issue: MessageIssue = issues[0]
-                val serializedIssue = jsonHandler.serialize(issue.cause)
-                ResponseError(issue.code, issue.text, serializedIssue)
-            } else {
-                val message = "Multiple issues were found in '" + requestMessage.method + "' request."
-                val serializedIssues = jsonHandler.serialize(issues)
-                ResponseError(ResponseErrorCode.InvalidRequest.value, message, serializedIssues)
-            }
-        out.consume(ResponseMessage.Error(requestId, errorObject))
-    }
-
-    private fun handleResponseIssues(responseMessage: ResponseMessage, issues: List<MessageIssue>) {
-        var requestInfo: PendingRequestInfo?
-        synchronized(sentRequestMap) { requestInfo = sentRequestMap.remove(responseMessage.id) }
-        if (requestInfo == null) {
-            // We have no pending request information that matches the id given in the response
-            LOG.log(
-                Level.WARNING,
-                "Unmatched response message: $responseMessage"
-            )
-            logIssues(responseMessage, issues)
-        } else {
-            requestInfo!!.future.completeExceptionally(MessageIssueException(responseMessage, issues))
-        }
-    }
-
-    private fun isCancellation(t: Throwable?): Boolean {
-        return if (t is CompletionException) {
-            isCancellation(t.cause)
-        } else t is CancellationException
-    }
 
     override fun resolveMethod(requestId: MessageId?): String? {
         synchronized(sentRequestMap) {
@@ -293,10 +284,16 @@ class RemoteEndpoint(
 
     companion object {
         private val LOG = Logger.getLogger(RemoteEndpoint::class.jvmName)
+        private fun isCancellation(t: Throwable?): Boolean {
+            return if (t is CompletionException) {
+                isCancellation(t.cause)
+            } else t is CancellationException
+        }
+
         val DEFAULT_EXCEPTION_HANDLER: Function<Throwable, ResponseError> =
             Function<Throwable, ResponseError> { throwable: Throwable ->
                 if (throwable is ResponseErrorException) {
-                    return@Function (throwable as ResponseErrorException).responseError
+                    return@Function throwable.responseError
                 } else if ((throwable is CompletionException || throwable is InvocationTargetException)
                     && throwable.cause is ResponseErrorException
                 ) {
@@ -313,7 +310,7 @@ class RemoteEndpoint(
             throwable.printStackTrace(stackTraceWriter)
             stackTraceWriter.flush()
             val data = JsonPrimitive(stackTrace.toString())
-            return ResponseError(ResponseErrorCode.InternalError.value, "$header.", data)
+            return ResponseError(ResponseErrorCode.InternalError.code, "$header.", data)
         }
     }
 }

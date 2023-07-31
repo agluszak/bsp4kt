@@ -92,8 +92,7 @@ class IntegrationTest {
         val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 
-        val header = "Content-Length: 52$CRLF$CRLF"
-        val actualJson = Json.parseToJsonElement(out.toString().removePrefix(header))
+        val actualJson = out.toString().removeContentLengthAndParse(52)
         val expectedJson = Json.parseToJsonElement(
             """{"jsonrpc":"2.0","id":"42","result":{"value":"bar"}}"""
         )
@@ -276,9 +275,9 @@ class IntegrationTest {
         val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 
-        val header = "Content-Length: 133$CRLF$CRLF"
+        val header = "Content-Length: 120$CRLF$CRLF"
         val actualJson = Json.parseToJsonElement(out.toString().removePrefix(header))
-        val expected = Json.parseToJsonElement("""{"id":1,"error":{"code":-32800,"message":"The request (id: NumberId(id=1), method: 'askServer') has been cancelled"},"jsonrpc":"2.0"}""")
+        val expected = Json.parseToJsonElement("""{"id":1,"error":{"code":-32800,"message":"The request (id: 1, method: 'askServer') has been cancelled"},"jsonrpc":"2.0"}""")
 
         assertEquals(
             expected,
@@ -343,16 +342,11 @@ class IntegrationTest {
 
     @Test
     fun testUnknownMessages() {
-        // intercept log messages
-        val logMessages = LogMessageAccumulator()
-        try {
-            logMessages.registerTo(GenericEndpoint::class)
+        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
 
             // create client messages
-            val clientMessage1 =
-                ("{\"jsonrpc\": \"2.0\",\n\"method\": \"foo1\",\n\"params\": \"bar\"\n}")
-            val clientMessage2 =
-                ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"foo2\",\n\"params\": \"bar\"\n}")
+            val clientMessage1 = """{"jsonrpc": "2.0","method": "foo1"}"""
+            val clientMessage2 = """{"jsonrpc": "2.0","id": "1","method": "foo2"}"""
             val clientMessages = getClientMessage(clientMessage1) + getClientMessage(clientMessage2)
 
             // create server side
@@ -363,14 +357,14 @@ class IntegrationTest {
                 server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-            logMessages.await(Level.WARNING, "Unsupported notification method: foo1")
-            logMessages.await(Level.WARNING, "Unsupported request method: foo2")
+            logMessages.await(Level.WARNING, "Notification could not be handled: NotificationMessage(method=foo1, params=null). Unsupported method: foo1")
+            logMessages.await(Level.WARNING, "Request could not be handled: RequestMessage(id=\"1\", method=foo2, params=null). Unsupported method: foo2")
+            val header = "Content-Length: 87$CRLF$CRLF"
+            val actualJson = Json.parseToJsonElement(out.toString().removePrefix(header))
             assertEquals(
-                ("Content-Length: 95$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32601,\"message\":\"Unsupported request method: foo2\"}}"),
-                out.toString()
+                Json.parseToJsonElement("""{"id":"1","error":{"code":-32601,"message":"Unsupported method: foo2"},"jsonrpc":"2.0"}"""),
+                actualJson
             )
-        } finally {
-            logMessages.unregister()
         }
     }
 
@@ -378,15 +372,11 @@ class IntegrationTest {
     @Throws(Exception::class)
     fun testUnknownOptionalMessages() {
         // intercept log messages
-        val logMessages = LogMessageAccumulator()
-        try {
-            logMessages.registerTo(GenericEndpoint::class)
+        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
 
             // create client messages
-            val clientMessage1 =
-                ("{\"jsonrpc\": \"2.0\",\n\"method\": \"$/foo1\",\n\"params\": \"bar\"\n}")
-            val clientMessage2 =
-                ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"$/foo2\",\n\"params\": \"bar\"\n}")
+            val clientMessage1 = """{"jsonrpc": "2.0","method": "$/foo1"}"""
+            val clientMessage2 = """{"jsonrpc": "2.0","id": "1","method": "$/foo2"}"""
             val clientMessages = getClientMessage(clientMessage1) + getClientMessage(clientMessage2)
 
             // create server side
@@ -397,14 +387,14 @@ class IntegrationTest {
                 server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-            logMessages.await(Level.INFO, "Unsupported notification method: $/foo1")
-            logMessages.await(Level.INFO, "Unsupported request method: $/foo2")
+            logMessages.await(Level.INFO, "Ignoring optional notification: NotificationMessage(method=\$/foo1, params=null)")
+            logMessages.await(Level.INFO, "Ignoring optional request: RequestMessage(id=\"1\", method=\$/foo2, params=null)")
+
+            val actual = out.toString().removeContentLengthAndParse(89)
             assertEquals(
-                ("Content-Length: 40$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"result\":null}"),
-                out.toString()
+                Json.parseToJsonElement("""{"id":"1","error":{"code":-32601,"message":"Unsupported method: $/foo2"},"jsonrpc":"2.0"}"""),
+                actual
             )
-        } finally {
-            logMessages.unregister()
         }
     }
 
@@ -416,10 +406,7 @@ class IntegrationTest {
     @Test
     @Throws(Exception::class)
     fun testUnexpectedParams() {
-        // intercept log messages
-        val logMessages = LogMessageAccumulator()
-        try {
-            logMessages.registerTo(GenericEndpoint::class)
+        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
 
             // create client messages
             val notificationMessage =
@@ -438,144 +425,102 @@ class IntegrationTest {
             serverSideLauncher.startListening()
             logMessages.await(
                 Level.WARNING,
-                ("Unexpected params '{\"value\":\"foo\"}' for 'public abstract void org.eclipse.lsp4j.jsonrpc.test.IntegrationTest\$UnexpectedParamsTestServer.myNotification()' is ignored")
+                ("Notification could not be handled: NotificationMessage(method=myNotification, params=ObjectParams(params={\"value\":\"foo\"})). Wrong number of parameters for method myNotification: expected 0, got 1")
             )
-        } finally {
-            logMessages.unregister()
         }
     }
 
     // TODO: We don't support handling malformed json yet, because kotlinx.serialization doesn't support it.
-
-    @Test
-    @Ignore
-    fun testMalformedJson1() {
-        val requestMessage1 =
-            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": }\n}")
-        val requestMessage2 =
-            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"2\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
-        val clientMessages =
-            getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
-        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
-        val out = ByteArrayOutputStream()
-        val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
-        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-        assertEquals(
-            (("Content-Length: 214$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\",\"data\":{\"message\":\"com.google.gson.stream.MalformedJsonException: Expected value at line 4 column 22 path $.params.value\"}}}Content-Length: 51$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
-            out.toString()
-        )
-    }
-
-    @Test
-    @Ignore
-    fun testMalformedJson2() {
-        // intercept log messages
-        val logMessages = LogMessageAccumulator()
-        try {
-            logMessages.registerTo(StreamMessageProducer::class)
-            val requestMessage1 =
-                ("{\"jsonrpc\": \"2.0\",\n\"params\": { \"value\": }\n\"id\": \"1\",\n\"method\":\"askServer\",\n}")
-            val requestMessage2 =
-                ("{\"jsonrpc\": \"2.0\",\n\"id\": \"2\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
-            val clientMessages = getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
-            val `in` = ByteArrayInputStream(clientMessages.toByteArray())
-            val out = ByteArrayOutputStream()
-            val server: MyServer = MyServerImpl()
-            val serverSideLauncher = Launcher.createLauncher(
-                server, MyClient::class, `in`, out
-            )
-            serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-            logMessages.await(
-                Level.SEVERE,
-                "com.google.gson.stream.MalformedJsonException: Expected value at line 2 column 22 path $.params.value"
-            )
-            assertEquals(
-                ("Content-Length: 51$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
-                out.toString()
-            )
-        } finally {
-            logMessages.unregister()
-        }
-    }
-
-    @Test
-    @Ignore
-    fun testMalformedJson3() {
-        val requestMessage1 =
-            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n]")
-        val requestMessage2 =
-            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"2\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
-        val clientMessages = getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
-        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
-        val out = ByteArrayOutputStream()
-        val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
-        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-        assertEquals(
-            """Content-Length: 165$CRLF$CRLF{"jsonrpc":"2.0","id":"1","error":{"code":-32700,"message":"Message could not be parsed.","data":{"message":"Unterminated object at line 5 column 2 path $.params"}}}Content-Length: 51$CRLF$CRLF{"jsonrpc":"2.0","id":"2","result":{"value":"bar"}}""",
-            out.toString()
-        )
-    }
-
-    @Test
-    @Ignore
-    fun testMalformedJson4() {
-        val requestMessage1 =
-            "{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}}"
-        val requestMessage2 =
-            ("{\"jsonrpc\":\"2.0\",\n\"id\":\"2\",\n\"method\":\"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
-        val clientMessages = getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
-        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
-        val out = ByteArrayOutputStream()
-        val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
-        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-        assertEquals(
-            (("Content-Length: 195$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\",\"data\":{\"message\":\"Use JsonReader.setLenient(true) to accept malformed JSON at line 5 column 3 path $\"}}}Content-Length: 51$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
-            out.toString()
-        )
-    }
-
-    @Test
-    @Throws(Exception::class)
-    fun testValidationIssue1() {
-        val requestMessage1 =
-            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": null }\n}")
-        val requestMessage2 =
-            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"2\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
-        val clientMessages = getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
-        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
-        val out = ByteArrayOutputStream()
-        val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher.createLauncher(
-            server, MyClient::class, `in`, out
-        )
-        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-        assertEquals(
-            (("Content-Length: 157$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32602,\"message\":\"The accessor \\u0027MyParam.getValue()\\u0027 must return a non-null value. Path: $.params.value\"}}Content-Length: 51$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
-            out.toString()
-        )
-    }
-
-    @Test
-    @Throws(Exception::class)
-    fun testValidationIssue2() {
-        val requestMessage1 =
-            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": null, \"nested\": { \"value\": null } }\n}")
-        val clientMessages = getClientMessage(requestMessage1)
-        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
-        val out = ByteArrayOutputStream()
-        val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher.createLauncher(
-            server, MyClient::class, `in`, out
-        )
-        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-        assertEquals(
-            ("Content-Length: 379$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32600,\"message\":\"Multiple issues were found in \\u0027askServer\\u0027 request.\",\"data\":[{\"text\":\"The accessor \\u0027MyParam.getValue()\\u0027 must return a non-null value. Path: $.params.nested.value\",\"code\":-32602},{\"text\":\"The accessor \\u0027MyParam.getValue()\\u0027 must return a non-null value. Path: $.params.value\",\"code\":-32602}]}}"),
-            out.toString()
-        )
-    }
+//
+//    @Test
+//    @Ignore
+//    fun testMalformedJson1() {
+//        val requestMessage1 =
+//            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": }\n}")
+//        val requestMessage2 =
+//            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"2\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
+//        val clientMessages =
+//            getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
+//        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
+//        val out = ByteArrayOutputStream()
+//        val server: MyServer = MyServerImpl()
+//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
+//        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
+//        assertEquals(
+//            (("Content-Length: 214$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\",\"data\":{\"message\":\"com.google.gson.stream.MalformedJsonException: Expected value at line 4 column 22 path $.params.value\"}}}Content-Length: 51$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
+//            out.toString()
+//        )
+//    }
+//
+//    @Test
+//    @Ignore
+//    fun testMalformedJson2() {
+//        // intercept log messages
+//        val logMessages = LogMessageAccumulator()
+//        try {
+//            logMessages.registerTo(StreamMessageProducer::class)
+//            val requestMessage1 =
+//                ("{\"jsonrpc\": \"2.0\",\n\"params\": { \"value\": }\n\"id\": \"1\",\n\"method\":\"askServer\",\n}")
+//            val requestMessage2 =
+//                ("{\"jsonrpc\": \"2.0\",\n\"id\": \"2\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
+//            val clientMessages = getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
+//            val `in` = ByteArrayInputStream(clientMessages.toByteArray())
+//            val out = ByteArrayOutputStream()
+//            val server: MyServer = MyServerImpl()
+//            val serverSideLauncher = Launcher.createLauncher(
+//                server, MyClient::class, `in`, out
+//            )
+//            serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
+//            logMessages.await(
+//                Level.SEVERE,
+//                "com.google.gson.stream.MalformedJsonException: Expected value at line 2 column 22 path $.params.value"
+//            )
+//            assertEquals(
+//                ("Content-Length: 51$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
+//                out.toString()
+//            )
+//        } finally {
+//            logMessages.unregister()
+//        }
+//    }
+//
+//    @Test
+//    @Ignore
+//    fun testMalformedJson3() {
+//        val requestMessage1 =
+//            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n]")
+//        val requestMessage2 =
+//            ("{\"jsonrpc\": \"2.0\",\n\"id\": \"2\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
+//        val clientMessages = getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
+//        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
+//        val out = ByteArrayOutputStream()
+//        val server: MyServer = MyServerImpl()
+//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
+//        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
+//        assertEquals(
+//            """Content-Length: 165$CRLF$CRLF{"jsonrpc":"2.0","id":"1","error":{"code":-32700,"message":"Message could not be parsed.","data":{"message":"Unterminated object at line 5 column 2 path $.params"}}}Content-Length: 51$CRLF$CRLF{"jsonrpc":"2.0","id":"2","result":{"value":"bar"}}""",
+//            out.toString()
+//        )
+//    }
+//
+//    @Test
+//    @Ignore
+//    fun testMalformedJson4() {
+//        val requestMessage1 =
+//            "{\"jsonrpc\": \"2.0\",\n\"id\": \"1\",\n\"method\": \"askServer\",\n\"params\": { \"value\": \"bar\" }\n}}"
+//        val requestMessage2 =
+//            ("{\"jsonrpc\":\"2.0\",\n\"id\":\"2\",\n\"method\":\"askServer\",\n\"params\": { \"value\": \"bar\" }\n}")
+//        val clientMessages = getClientMessage(requestMessage1) + getClientMessage(requestMessage2)
+//        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
+//        val out = ByteArrayOutputStream()
+//        val server: MyServer = MyServerImpl()
+//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
+//        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
+//        assertEquals(
+//            (("Content-Length: 195$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\",\"data\":{\"message\":\"Use JsonReader.setLenient(true) to accept malformed JSON at line 5 column 3 path $\"}}}Content-Length: 51$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
+//            out.toString()
+//        )
+//    }
 
     private fun getClientMessage(requestMessage: String): String {
         val contentLength = requestMessage.toByteArray().size

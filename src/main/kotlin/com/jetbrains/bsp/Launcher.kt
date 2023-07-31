@@ -5,7 +5,6 @@ import com.jetbrains.bsp.json.*
 import com.jetbrains.bsp.messages.ResponseError
 import com.jetbrains.bsp.services.ServiceEndpoints
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonBuilder
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.ExecutorService
@@ -47,7 +46,7 @@ interface Launcher<Local, Remote> {
             val remoteProxy = createProxy(remoteEndpoint)
 
             // Create the message processor
-            val reader = StreamMessageProducer(input, jsonHandler, remoteEndpoint)
+            val reader = StreamMessageProducer(input, jsonHandler)
             val msgProcessor: ConcurrentMessageProcessor = createMessageProcessor(reader, remoteEndpoint, remoteProxy)
             return createLauncher(executorService, remoteProxy, msgProcessor)
         }
@@ -67,9 +66,7 @@ interface Launcher<Local, Remote> {
         private fun createRemoteEndpoint(jsonHandler: MessageJsonHandler): RemoteEndpoint {
             val outgoingMessageStream: MessageConsumer = StreamMessageConsumer(output, jsonHandler)
             val localEndpoint: Endpoint = ServiceEndpoints.toEndpoint(localService)
-            val remoteEndpoint = RemoteEndpoint(outgoingMessageStream, localEndpoint, jsonHandler, exceptionHandler)
-            jsonHandler.methodProvider = remoteEndpoint
-            return remoteEndpoint
+            return RemoteEndpoint(outgoingMessageStream, localEndpoint, jsonHandler, exceptionHandler)
         }
 
         /**

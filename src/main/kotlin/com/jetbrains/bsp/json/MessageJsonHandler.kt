@@ -1,24 +1,16 @@
 package com.jetbrains.bsp.json
 
-import com.jetbrains.bsp.MessageIssueException
-import com.jetbrains.bsp.json.serializers.WrappingListSerializer
-import com.jetbrains.bsp.messages.CancelParams
-import com.jetbrains.bsp.messages.JsonParams
-import com.jetbrains.bsp.messages.Message
-import com.jetbrains.bsp.messages.MessageIssue
-import kotlinx.serialization.SerializationException
+import com.jetbrains.bsp.*
+import com.jetbrains.bsp.messages.*
+import kotlinx.serialization.*
 import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
-import kotlinx.serialization.serializer
+import kotlin.reflect.KType
 import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.typeOf
 
 
 class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonRpcMethod>) {
-    var methodProvider: MethodProvider? = null
-
     /**
      * Resolve an RPC method by name.
      */
@@ -28,29 +20,53 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
         return null
     }
 
+    fun <T> serialize(value: T, type: KType): JsonElement {
+        return serialize(value, json.serializersModule.serializer(type))
+    }
+
+    fun <T> serialize(value: T, serializer: KSerializer<T>): JsonElement {
+        try {
+            return json.encodeToJsonElement(serializer, value)
+        } catch (e: SerializationException) {
+            throw MessageIssueException(SerializationIssue(e))
+        }
+    }
+
+    fun <T> deserialize(jsonElement: JsonElement, type: KType): T {
+        return deserialize(jsonElement, json.serializersModule.serializer(type)) as T
+    }
+
+    fun <T> deserialize(jsonElement: JsonElement, serializer: KSerializer<T>): T {
+        try {
+            return json.decodeFromJsonElement(serializer, jsonElement)
+        } catch (e: SerializationException) {
+            throw MessageIssueException(SerializationIssue(e))
+        }
+    }
+
     fun serializeResult(method: String, result: Any?): JsonElement {
-        val jsonRpcMethod = getJsonRpcMethod(method) ?: throw IllegalArgumentException("Unknown method: $method")
+        val jsonRpcMethod = getJsonRpcMethod(method) ?: throw MessageIssueException(NoSuchMethod(method))
         val resultType = jsonRpcMethod.resultType
-        return json.encodeToJsonElement(json.serializersModule.serializer(resultType), result)
+        return serialize(result, resultType)
     }
 
     fun deserializeResult(method: String, result: JsonElement): Any? {
-        val jsonRpcMethod = getJsonRpcMethod(method) ?: throw IllegalArgumentException("Unknown method: $method")
+        val jsonRpcMethod = getJsonRpcMethod(method) ?: throw MessageIssueException(NoSuchMethod(method))
         val resultType = jsonRpcMethod.resultType
-        return json.decodeFromJsonElement(json.serializersModule.serializer(resultType), result)
+        return deserialize(result, resultType)
     }
 
     fun serializeParams(method: String, params: List<Any?>): JsonParams {
-        val jsonRpcMethod = getJsonRpcMethod(method) ?: throw IllegalArgumentException("Unknown method: $method")
+        val jsonRpcMethod = getJsonRpcMethod(method) ?: throw MessageIssueException(NoSuchMethod(method))
         if (params.size != jsonRpcMethod.parameterTypes.size) {
-            throw IllegalArgumentException(
-                "Wrong number of parameters for method $method: expected ${jsonRpcMethod.parameterTypes.size}, got ${params.size}"
-            )
+            val issue = WrongNumberOfParamsIssue(method, jsonRpcMethod.parameterTypes.size, params.size)
+            throw MessageIssueException(issue)
         }
         return when (params.size) {
             0 -> JsonParams.ObjectParams(buildJsonObject { })
             1 -> {
-                when (val jsonElement = json.encodeToJsonElement(json.serializersModule.serializer(jsonRpcMethod.parameterTypes[0]), params[0])) {
+                val jsonElement = serialize(params[0], jsonRpcMethod.parameterTypes[0])
+                when (jsonElement) {
                     is JsonObject -> JsonParams.ObjectParams(jsonElement)
                     else -> JsonParams.ArrayParams(JsonArray(listOf(jsonElement)))
                 }
@@ -58,16 +74,17 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
 
             else -> {
                 // TODO use correct serializers for each parameter
-                val jsonElement = json.encodeToJsonElement(json.serializersModule.serializer(), params)
+                val jsonElement = serialize(params, typeOf<Any>())
                 JsonParams.ArrayParams(jsonElement.jsonArray)
             }
         }
     }
 
-    fun deserializeParams(method: String, params: JsonParams?): List<Any?> {
-        val size = params?.size ?: 0
-        val jsonRpcMethod = getJsonRpcMethod(method) ?: throw IllegalArgumentException("Unknown method: $method")
+    fun deserializeParams(message: IncomingMessage): List<Any?> {
+        val size = message.params?.size ?: 0
+        val jsonRpcMethod = getJsonRpcMethod(message.method) ?: throw MessageIssueException(NoSuchMethod(message.method))
 
+        val params = message.params
         return when (params) {
             null -> emptyList()
             is JsonParams.ObjectParams -> {
@@ -75,9 +92,13 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
                 if (jsonObject.isEmpty()) {
                     listOf(null)
                 } else {
-                    val type = jsonRpcMethod.parameterTypes[0]
-                    val result = json.decodeFromJsonElement(json.serializersModule.serializer(type), jsonObject)
-                    listOf(result)
+                    val parameterType = jsonRpcMethod.parameterTypes.singleOrNull()
+                    if (parameterType == null) {
+                        throw MessageIssueException(WrongNumberOfParamsIssue(message.method, 0, 1))
+                    } else {
+                        val result = deserialize<Any>(jsonObject, parameterType)
+                        listOf(result)
+                    }
                 }
             }
 
@@ -85,9 +106,8 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
                 // If the method has a single parameter of type List, we deserialize the whole array as that parameter
                 if (jsonRpcMethod.parameterTypes.size == 1 && jsonRpcMethod.parameterTypes[0].isSubtypeOf(typeOf<List<*>>())) {
                     val elementType = json.serializersModule.serializer(jsonRpcMethod.parameterTypes[0])
-                    println("elementType: $elementType")
                     val serializer = ListSerializer(elementType)
-                    return json.decodeFromJsonElement(serializer, params.params)
+                    return deserialize(params.params, serializer)
                 }
                 // Otherwise, we treat the array as a list of parameters and add nulls if the array is too short
                 val jsonArray = if (size < jsonRpcMethod.parameterTypes.size) {
@@ -102,42 +122,15 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
         }
     }
 
-    fun parseMessage(input: String): Message {
-        return try {
-            json.decodeFromString(input)
-        } catch (e: SerializationException) {
-            throw MessageIssueException(null, listOf(MessageIssue("Failed to parse message", cause = e)))
-        }
+    fun deserializeMessage(input: String): Message {
+        return json.decodeFromString(input)
     }
 
-    fun serialize(message: Message): String {
-        return try {
-            json.encodeToString(message)
-        } catch (e: SerializationException) {
-            throw MessageIssueException(null, listOf(MessageIssue("Failed to serialize message", cause = e)))
-        }
+    fun serializeMessage(message: Message): String {
+        return json.encodeToString(message)
     }
-
-
-    inline fun <reified T> serialize(value: T): JsonElement =
-        json.encodeToJsonElement(json.serializersModule.serializer(), value)
-
 
     companion object {
         val CANCEL_METHOD: JsonRpcMethod = JsonRpcMethod.notification("$/cancelRequest", typeOf<CancelParams>())
-//        private var toStringInstance: MessageJsonHandler? = null
-//
-//        /**
-//         * Perform JSON serialization of the given object using the default configuration of JSON-RPC messages
-//         * enhanced with the pretty printing option.
-//         */
-//        fun toString(`object`: Any?): String {
-//            if (toStringInstance == null) {
-//                toStringInstance = MessageJsonHandler(
-//                    emptyMap<String, JsonRpcMethod>(),
-//                    Consumer<GsonBuilder> { gsonBuilder: GsonBuilder -> gsonBuilder.setPrettyPrinting() })
-//            }
-//            return toStringInstance!!.gson.toJson(`object`)
-//        }
     }
 }

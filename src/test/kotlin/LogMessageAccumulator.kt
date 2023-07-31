@@ -1,4 +1,5 @@
 import org.junit.jupiter.api.Assertions.fail
+import java.io.Closeable
 import java.util.*
 import java.util.function.Predicate
 import java.util.logging.Handler
@@ -10,11 +11,12 @@ import kotlin.reflect.KClass
 import kotlin.reflect.jvm.jvmName
 
 
-class LogMessageAccumulator() : Handler() {
+class LogMessageAccumulator(clazz: KClass<*>) : Handler(), Closeable {
     private val records: MutableList<LogRecord> = ArrayList()
     private val registeredLoggers: MutableList<Logger> = ArrayList()
-    fun registerTo(clazz: KClass<*>): Logger {
-        return registerTo(clazz.jvmName)
+
+    init {
+        registerTo(clazz.jvmName)
     }
 
     fun registerTo(name: String?): Logger {
@@ -60,6 +62,7 @@ class LogMessageAccumulator() : Handler() {
 
     @Throws(SecurityException::class)
     override fun close() {
+        unregister()
     }
 
     @Throws(InterruptedException::class)

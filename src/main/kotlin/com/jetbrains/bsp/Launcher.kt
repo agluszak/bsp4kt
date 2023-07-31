@@ -27,13 +27,13 @@ interface Launcher<Local, Remote> {
      *
      * @param <T> remote service interface type
     </T> */
-    open class Builder<Local : Any, Remote :Any>(
+    open class Builder<Local : Any, Remote : Any>(
         val input: InputStream,
         val output: OutputStream,
         val localService: Local,
         val remoteInterface: KClass<out Remote>,
         val json: Json = Json {
-                              ignoreUnknownKeys = true
+            ignoreUnknownKeys = true
         },
         val executorService: ExecutorService = Executors.newCachedThreadPool(),
         val exceptionHandler: Function<Throwable, ResponseError> = DEFAULT_EXCEPTION_HANDLER
@@ -57,7 +57,8 @@ interface Launcher<Local, Remote> {
         private fun createJsonHandler(): MessageJsonHandler {
             return MessageJsonHandler(
                 json,
-                supportedMethods)
+                supportedMethods
+            )
         }
 
         /**
@@ -126,7 +127,7 @@ interface Launcher<Local, Remote> {
          * @param in - input stream to listen for incoming messages
          * @param out - output stream to send outgoing messages
          */
-        fun <Local: Any, Remote: Any> createLauncher(
+        fun <Local : Any, Remote : Any> createLauncher(
             localService: Local, remoteInterface: KClass<Remote>, input: InputStream, output: OutputStream
         ): Launcher<Local, Remote> {
             return Builder(input, output, localService, remoteInterface).create()

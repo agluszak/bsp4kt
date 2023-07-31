@@ -11,6 +11,8 @@ sealed class MessageIssue(val message: String) {
         is WrongNumberOfParamsIssue -> ResponseError(ResponseErrorCode.InvalidParams.code, message)
     }
 }
+
 class NoSuchMethod(val methodName: String) : MessageIssue("Unsupported method: $methodName")
 class SerializationIssue(cause: SerializationException) : MessageIssue("Error during serialization: ${cause.message}")
-class WrongNumberOfParamsIssue(val method: String, val expected: Int, val actual: Int) : MessageIssue("Wrong number of parameters for method $method: expected $expected, got $actual")
+class WrongNumberOfParamsIssue(val method: String, val expected: Int, val actual: Int) :
+    MessageIssue("Wrong number of parameters for method $method: expected $expected, got $actual")

@@ -150,7 +150,10 @@ class ExtendableConcurrentMessageProcessorTest {
     /*
 	 * A class used to store the results of the test (success or failure)
 	 */
-    class TestContextWrapper<Local : Any, Remote : Any>(val store: MessageContextStore<Remote>, var error: Boolean = false) {
+    class TestContextWrapper<Local : Any, Remote : Any>(
+        val store: MessageContextStore<Remote>,
+        var error: Boolean = false
+    ) {
         fun createLauncher(
             localService: Local,
             remoteInterface: KClass<Remote>,

@@ -2,10 +2,11 @@ package annotations.impl
 
 import LogMessageAccumulator
 import com.jetbrains.bsp.RemoteEndpoint
-import com.jetbrains.bsp.services.*
+import com.jetbrains.bsp.services.GenericEndpoint
+import com.jetbrains.bsp.services.JsonNotification
+import com.jetbrains.bsp.services.JsonRequest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.function.Predicate
 import java.util.logging.Level

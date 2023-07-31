@@ -3,7 +3,6 @@ package com.jetbrains.bsp.services
 
 import com.jetbrains.bsp.Endpoint
 import com.jetbrains.bsp.json.JsonRpcMethod
-import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Proxy
 import java.util.concurrent.CompletableFuture
 import kotlin.reflect.KClass
@@ -26,7 +25,7 @@ object ServiceEndpoints {
      *
      * @return the wrapped service endpoint
      */
-    fun <T: Any> toEndpoint(serviceObject: T): Endpoint {
+    fun <T : Any> toEndpoint(serviceObject: T): Endpoint {
         return GenericEndpoint(serviceObject)
     }
 
@@ -53,7 +52,8 @@ object ServiceEndpoints {
                 val genericReturnType = methodInfo.method.returnType
                 if (genericReturnType.arguments.size == 1 && genericReturnType.classifier == CompletableFuture::class) {
                     val returnType =
-                        genericReturnType.arguments[0].type ?: throw IllegalStateException("Expecting return type of CompletableFuture but was : $genericReturnType")
+                        genericReturnType.arguments[0].type
+                            ?: throw IllegalStateException("Expecting return type of CompletableFuture but was : $genericReturnType")
 //                    var responseTypeAdapter: TypeAdapterFactory? = null
 //                    val responseTypeAdapterAnnotation: ResponseJsonAdapter = methodInfo.method.getAnnotation(
 //                        ResponseJsonAdapter::class.java

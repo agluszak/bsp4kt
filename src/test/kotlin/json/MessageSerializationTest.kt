@@ -2,7 +2,6 @@ package json
 
 import com.jetbrains.bsp.messages.*
 import kotlinx.serialization.InternalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import kotlinx.serialization.serializer
 import org.junit.jupiter.api.Test
@@ -13,14 +12,14 @@ import kotlin.test.assertEquals
 class MessageSerializationTest {
     /// This is a helper function to test serialization of a message using a superclass' serializer.
     @OptIn(InternalSerializationApi::class)
-    fun <T: Cast, Cast: Any> validateJsonSerialization(value: T, expectedJson: JsonElement, cast: KClass<Cast>) {
+    fun <T : Cast, Cast : Any> validateJsonSerialization(value: T, expectedJson: JsonElement, cast: KClass<Cast>) {
         val json = Json.encodeToJsonElement(cast.serializer(), cast.cast(value))
         // Remove any null fields
         val filteredJson = when (json) {
             is JsonObject -> JsonObject(json.jsonObject.filterValues { it != JsonNull })
             else -> json
         }
-                    assertEquals(expectedJson, filteredJson)
+        assertEquals(expectedJson, filteredJson)
 
         val decoded = Json.decodeFromJsonElement(cast.serializer(), json)
         assertEquals(value, decoded)
@@ -64,7 +63,8 @@ class MessageSerializationTest {
 
     @Test
     fun `serialize notification message`() {
-        val withParams = NotificationMessage("test", JsonParams.ObjectParams(buildJsonObject { put("a", "1"); put("b", 2) }))
+        val withParams =
+            NotificationMessage("test", JsonParams.ObjectParams(buildJsonObject { put("a", "1"); put("b", 2) }))
         val json = buildJsonObject {
             put("jsonrpc", "2.0")
             put("method", "test")
@@ -84,7 +84,11 @@ class MessageSerializationTest {
 
     @Test
     fun `serialize request message`() {
-        val withParams = RequestMessage(MessageId.NumberId(1), "test", JsonParams.ObjectParams(buildJsonObject { put("a", "1"); put("b", 2) }) )
+        val withParams = RequestMessage(
+            MessageId.NumberId(1),
+            "test",
+            JsonParams.ObjectParams(buildJsonObject { put("a", "1"); put("b", 2) })
+        )
         val json = buildJsonObject {
             put("jsonrpc", "2.0")
             put("id", 1)

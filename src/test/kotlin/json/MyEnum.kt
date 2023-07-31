@@ -6,7 +6,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 
 @Serializable(with = MyEnum.Companion::class)
-enum class MyEnum(override val value: Int): BspEnum {
+enum class MyEnum(override val value: Int) : BspEnum {
     A(1),
     B(2),
     C(3);

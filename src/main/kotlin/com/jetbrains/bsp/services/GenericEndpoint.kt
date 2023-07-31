@@ -24,7 +24,7 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
         recursiveFindRpcMethods(delegate, HashSet())
     }
 
-     private fun recursiveFindRpcMethods(current: T, visited: MutableSet<KClass<*>>) {
+    private fun recursiveFindRpcMethods(current: T, visited: MutableSet<KClass<*>>) {
         AnnotationUtil.findRpcMethods(current!!::class, visited) { methodInfo ->
             val handler =
                 Function { args: List<Any?> ->
@@ -34,7 +34,7 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
                         val parameterCount = method.parameters.size - 1 // -1 for the receiver
                         val arguments = if (argumentCount == parameterCount) {
                             args
-                        } else if (argumentCount < parameterCount){
+                        } else if (argumentCount < parameterCount) {
                             // Take as many as there are and fill the rest with nulls
                             val missing = parameterCount - argumentCount
                             args + List(missing) { null }
@@ -43,7 +43,7 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
                             args.take(parameterCount).also {
                                 val unexpectedArgs = args.drop(parameterCount)
                                 LOG.warning("Unexpected additional params '$unexpectedArgs' for '$method' are ignored")
-                                }
+                            }
                         }
 
                         val result = method.call(current, *arguments.toTypedArray())
@@ -96,13 +96,13 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
         }
 
         if (isOptionalMethod(method)) {
-            LOG.info { "Unsupported optional notification method: $method"}
+            LOG.info { "Unsupported optional notification method: $method" }
         } else {
             LOG.warning("Unsupported notification method: $method")
         }
     }
 
-     private fun isOptionalMethod(method: String?): Boolean {
+    private fun isOptionalMethod(method: String?): Boolean {
         return method != null && method.startsWith("$/")
     }
 

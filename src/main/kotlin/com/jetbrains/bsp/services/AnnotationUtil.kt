@@ -4,7 +4,10 @@ import java.util.function.Consumer
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.KType
-import kotlin.reflect.full.*
+import kotlin.reflect.full.declaredMemberFunctions
+import kotlin.reflect.full.findAnnotation
+import kotlin.reflect.full.superclasses
+import kotlin.reflect.full.valueParameters
 import kotlin.reflect.jvm.isAccessible
 
 object AnnotationUtil {
@@ -55,10 +58,15 @@ object AnnotationUtil {
         return createMethodInfo(method, jsonRequest.useSegment, segment, jsonRequest.value)
     }
 
-    internal fun createMethodInfo(method: KFunction<*>, useSegment: Boolean, segment: String, value: String?): MethodInfo {
+    internal fun createMethodInfo(
+        method: KFunction<*>,
+        useSegment: Boolean,
+        segment: String,
+        value: String?
+    ): MethodInfo {
         method.isAccessible = true // TODO: is this necessary?
         val name = getMethodName(method, useSegment, segment, value)
-        val parameterTypes =method.valueParameters.map { it.type } // Exclues receiver type
+        val parameterTypes = method.valueParameters.map { it.type } // Exclues receiver type
         return MethodInfo(name, method, parameterTypes)
     }
 
@@ -67,5 +75,10 @@ object AnnotationUtil {
         return if (useSegment) segment + name else name
     }
 
-    data class MethodInfo(val name: String, val method: KFunction<*>, val parameterTypes: List<KType> = listOf(), val isNotification: Boolean = false)
+    data class MethodInfo(
+        val name: String,
+        val method: KFunction<*>,
+        val parameterTypes: List<KType> = listOf(),
+        val isNotification: Boolean = false
+    )
 }

@@ -1,10 +1,19 @@
 package com.jetbrains.bsp.json
 
-import com.jetbrains.bsp.*
-import com.jetbrains.bsp.messages.*
-import kotlinx.serialization.*
+import com.jetbrains.bsp.MessageIssueException
+import com.jetbrains.bsp.NoSuchMethod
+import com.jetbrains.bsp.SerializationIssue
+import com.jetbrains.bsp.WrongNumberOfParamsIssue
+import com.jetbrains.bsp.messages.CancelParams
+import com.jetbrains.bsp.messages.IncomingMessage
+import com.jetbrains.bsp.messages.JsonParams
+import com.jetbrains.bsp.messages.Message
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
+import kotlinx.serialization.serializer
 import kotlin.reflect.KType
 import kotlin.reflect.full.isSubtypeOf
 import kotlin.reflect.typeOf
@@ -82,7 +91,8 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
 
     fun deserializeParams(message: IncomingMessage): List<Any?> {
         val size = message.params?.size ?: 0
-        val jsonRpcMethod = getJsonRpcMethod(message.method) ?: throw MessageIssueException(NoSuchMethod(message.method))
+        val jsonRpcMethod =
+            getJsonRpcMethod(message.method) ?: throw MessageIssueException(NoSuchMethod(message.method))
 
         val params = message.params
         return when (params) {

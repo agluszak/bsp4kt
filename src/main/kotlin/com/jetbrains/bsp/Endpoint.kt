@@ -1,7 +1,5 @@
 package com.jetbrains.bsp
 
-import com.jetbrains.bsp.messages.JsonParams
-import kotlinx.serialization.json.JsonElement
 import java.util.concurrent.CompletableFuture
 
 /**

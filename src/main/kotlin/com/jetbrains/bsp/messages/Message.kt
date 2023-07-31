@@ -1,9 +1,13 @@
-
 package com.jetbrains.bsp.messages
 
 import com.jetbrains.bsp.messages.Message.Companion.JSONRPC_VERSION
-import kotlinx.serialization.*
-import kotlinx.serialization.descriptors.*
+import kotlinx.serialization.DeserializationStrategy
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
@@ -49,7 +53,8 @@ sealed interface Message {
             }
             require(json is JsonObject)
             // Add the jsonrpc version, ensure it will be the first field
-            val jsonWithJsonrpc = JsonObject(json.toMutableMap().also { it["jsonrpc"] = JsonPrimitive(JSONRPC_VERSION) })
+            val jsonWithJsonrpc =
+                JsonObject(json.toMutableMap().also { it["jsonrpc"] = JsonPrimitive(JSONRPC_VERSION) })
             jsonEncoder.encodeJsonElement(jsonWithJsonrpc)
         }
 
@@ -164,7 +169,8 @@ sealed interface IncomingMessage : Message {
 data class NotificationMessage(override val method: String, override val params: JsonParams? = null) : IncomingMessage
 
 @Serializable
-data class RequestMessage(val id: MessageId, override val method: String, override val params: JsonParams? = null) : IncomingMessage
+data class RequestMessage(val id: MessageId, override val method: String, override val params: JsonParams? = null) :
+    IncomingMessage
 
 @Serializable
 data class ResponseError(val code: Int, val message: String, val data: JsonElement? = null) {
@@ -172,8 +178,12 @@ data class ResponseError(val code: Int, val message: String, val data: JsonEleme
         fun fromException(exception: Exception): ResponseError {
             when (exception) {
                 is SerializationException -> {
-                    return ResponseError(ResponseErrorCode.ParseError.code, "Error during serialization: " + exception.message)
+                    return ResponseError(
+                        ResponseErrorCode.ParseError.code,
+                        "Error during serialization: " + exception.message
+                    )
                 }
+
                 else -> {
                     return ResponseError(ResponseErrorCode.InternalError.code, "Internal error: " + exception.message)
                 }

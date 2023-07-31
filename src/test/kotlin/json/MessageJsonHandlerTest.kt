@@ -13,7 +13,6 @@ package json
 
 import com.jetbrains.bsp.json.JsonRpcMethod
 import com.jetbrains.bsp.json.MessageJsonHandler
-import com.jetbrains.bsp.json.MethodProvider
 import com.jetbrains.bsp.messages.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
@@ -135,7 +134,7 @@ class MessageJsonHandlerTest {
     fun `serialize notification with no params`() {
         val handler = MessageJsonHandler(Json.Default, emptyMap())
         val message = NotificationMessage("foo", null)
-        val actual =  Json.parseToJsonElement(handler.serializeMessage(message))
+        val actual = Json.parseToJsonElement(handler.serializeMessage(message))
 
         val expected = Json.parseToJsonElement("""{"jsonrpc":"2.0","method":"foo"}""")
         assertEquals(expected, actual)
@@ -642,7 +641,8 @@ class MessageJsonHandlerTest {
         val params = handler.deserializeParams(message)
         assertEquals(
             listOf(
-            listOf(MyEnum.A, MyEnum.B, MyEnum.C)),
+                listOf(MyEnum.A, MyEnum.B, MyEnum.C)
+            ),
             params
         )
     }
@@ -669,7 +669,8 @@ class MessageJsonHandlerTest {
         val params = handler.deserializeParams(message)
         assertEquals(
             listOf(
-            listOf(MyEnum.A, MyEnum.B, null)),
+                listOf(MyEnum.A, MyEnum.B, null)
+            ),
             params
         )
     }
@@ -851,7 +852,7 @@ class MessageJsonHandlerTest {
             typeOf<Location>()
         )
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
-        
+
         val properties = arrayOf<String>(
             "\"jsonrpc\":\"2.0\"",
             "\"method\":\"foo\"",
@@ -875,9 +876,14 @@ class MessageJsonHandlerTest {
             typeOf<String>()
         )
         val request =
-            RequestMessage(MessageId.NumberId(1), "testMethod", JsonParams.ArrayParams(JsonArray(listOf(JsonPrimitive("param")))))
+            RequestMessage(
+                MessageId.NumberId(1),
+                "testMethod",
+                JsonParams.ArrayParams(JsonArray(listOf(JsonPrimitive("param"))))
+            )
 
-        val expected = Json.parseToJsonElement("""
+        val expected = Json.parseToJsonElement(
+            """
             {
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -886,7 +892,8 @@ class MessageJsonHandlerTest {
                     "param"
                 ]
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertEquals(expected, Json.parseToJsonElement(handler.serializeMessage(request)))
     }
 
@@ -896,7 +903,7 @@ class MessageJsonHandlerTest {
             typeOf<String>(),
             typeOf<String>()
         )
-        
+
         val request = ("{\n"
                 + "  \"jsonrpc\": \"2.0\",\n"
                 + "  \"id\": 1,\n"
@@ -918,10 +925,15 @@ class MessageJsonHandlerTest {
         val request = RequestMessage(
             MessageId.NumberId(1),
             "testMethod",
-            JsonParams.array(JsonArray(listOf(JsonPrimitive(true), JsonPrimitive(false))
-        )))
+            JsonParams.array(
+                JsonArray(
+                    listOf(JsonPrimitive(true), JsonPrimitive(false))
+                )
+            )
+        )
 
-        val expected = Json.parseToJsonElement("""
+        val expected = Json.parseToJsonElement(
+            """
             {
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -933,7 +945,8 @@ class MessageJsonHandlerTest {
                     ]
                 ]
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
 
         assertEquals(expected, Json.parseToJsonElement(handler.serializeMessage(request)))
     }
@@ -970,10 +983,11 @@ class MessageJsonHandlerTest {
         val request = RequestMessage(
             MessageId.NumberId(1),
             "testMethod",
-            JsonParams.array(JsonPrimitive(true), JsonPrimitive( "param2"))
+            JsonParams.array(JsonPrimitive(true), JsonPrimitive("param2"))
         )
 
-        val expected = Json.parseToJsonElement("""{"jsonrpc":"2.0","id":1,"method":"testMethod","params":[true,"param2"]}""")
+        val expected =
+            Json.parseToJsonElement("""{"jsonrpc":"2.0","id":1,"method":"testMethod","params":[true,"param2"]}""")
         val actual = Json.parseToJsonElement(handler.serializeMessage(request))
         assertEquals(
             expected,
@@ -988,7 +1002,7 @@ class MessageJsonHandlerTest {
             typeOf<Boolean>(),
             typeOf<String>()
         )
-        
+
         val request = """{
             "jsonrpc": "2.0",
             "id": 1,
@@ -1018,7 +1032,8 @@ class MessageJsonHandlerTest {
         )
 
 
-        val expected = Json.parseToJsonElement("""{"jsonrpc":"2.0","id":1,"method":"testMethod","params":[[true,false],"param2"]}""")
+        val expected =
+            Json.parseToJsonElement("""{"jsonrpc":"2.0","id":1,"method":"testMethod","params":[[true,false],"param2"]}""")
         val actual = Json.parseToJsonElement(handler.serializeMessage(request))
         assertEquals(
             expected,
@@ -1032,7 +1047,7 @@ class MessageJsonHandlerTest {
             typeOf<String>(), typeOf<List<Boolean>>(),
             typeOf<String>()
         )
-        
+
         val request = """
             {
                 "jsonrpc": "2.0",

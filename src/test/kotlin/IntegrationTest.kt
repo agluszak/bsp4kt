@@ -2,16 +2,13 @@ import com.jetbrains.bsp.CompletableFutures
 import com.jetbrains.bsp.Launcher
 import com.jetbrains.bsp.RemoteEndpoint
 import com.jetbrains.bsp.ResponseErrorException
-import com.jetbrains.bsp.json.StreamMessageProducer
 import com.jetbrains.bsp.messages.Message.Companion.CONTENT_LENGTH_HEADER
 import com.jetbrains.bsp.messages.Message.Companion.CRLF
-import com.jetbrains.bsp.services.GenericEndpoint
 import com.jetbrains.bsp.services.JsonNotification
 import com.jetbrains.bsp.services.JsonRequest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.*
-
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -21,7 +18,6 @@ import java.util.concurrent.*
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.jvm.jvmName
-import kotlin.test.Ignore
 
 class IntegrationTest {
     @Serializable
@@ -65,15 +61,17 @@ class IntegrationTest {
         `in`.connect(out2)
         out.connect(in2)
         val client: MyClient = MyClientImpl()
-        val clientSideLauncher: Launcher<MyClient, MyServer> = Launcher.createLauncher(client, MyServer::class, `in`, out)
+        val clientSideLauncher: Launcher<MyClient, MyServer> =
+            Launcher.createLauncher(client, MyServer::class, `in`, out)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, in2, out2)
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher.createLauncher(server, MyClient::class, in2, out2)
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
         val fooFuture = clientSideLauncher.remoteProxy.askServer(MyParam("FOO"))
-        val barFuture= serverSideLauncher.remoteProxy.askClient(MyParam("BAR"))
+        val barFuture = serverSideLauncher.remoteProxy.askClient(MyParam("BAR"))
         assertEquals("FOO", fooFuture[TIMEOUT, TimeUnit.MILLISECONDS]?.value)
         assertEquals("BAR", barFuture[TIMEOUT, TimeUnit.MILLISECONDS].value)
     }
@@ -89,7 +87,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 
         val actualJson = out.toString().removeContentLengthAndParse(52)
@@ -114,7 +113,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 
         val header = "Content-Length: 50$CRLF$CRLF"
@@ -138,7 +138,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 
         val header = "Content-Length: 49$CRLF$CRLF"
@@ -176,7 +177,8 @@ class IntegrationTest {
                 return CompletableFuture.completedFuture(param)
             }
         }
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, in2, out2)
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher.createLauncher(server, MyClient::class, in2, out2)
         clientSideLauncher.startListening()
         serverSideLauncher.startListening()
 
@@ -272,12 +274,14 @@ class IntegrationTest {
                 }
             }
         }
-        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher.createLauncher(server, MyClient::class, `in`, out)
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher.createLauncher(server, MyClient::class, `in`, out)
         serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 
         val header = "Content-Length: 120$CRLF$CRLF"
         val actualJson = Json.parseToJsonElement(out.toString().removePrefix(header))
-        val expected = Json.parseToJsonElement("""{"id":1,"error":{"code":-32800,"message":"The request (id: 1, method: 'askServer') has been cancelled"},"jsonrpc":"2.0"}""")
+        val expected =
+            Json.parseToJsonElement("""{"id":1,"error":{"code":-32800,"message":"The request (id: 1, method: 'askServer') has been cancelled"},"jsonrpc":"2.0"}""")
 
         assertEquals(
             expected,
@@ -357,8 +361,14 @@ class IntegrationTest {
                 server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-            logMessages.await(Level.WARNING, "Notification could not be handled: NotificationMessage(method=foo1, params=null). Unsupported method: foo1")
-            logMessages.await(Level.WARNING, "Request could not be handled: RequestMessage(id=\"1\", method=foo2, params=null). Unsupported method: foo2")
+            logMessages.await(
+                Level.WARNING,
+                "Notification could not be handled: NotificationMessage(method=foo1, params=null). Unsupported method: foo1"
+            )
+            logMessages.await(
+                Level.WARNING,
+                "Request could not be handled: RequestMessage(id=\"1\", method=foo2, params=null). Unsupported method: foo2"
+            )
             val header = "Content-Length: 87$CRLF$CRLF"
             val actualJson = Json.parseToJsonElement(out.toString().removePrefix(header))
             assertEquals(
@@ -387,8 +397,14 @@ class IntegrationTest {
                 server, MyClient::class, `in`, out
             )
             serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
-            logMessages.await(Level.INFO, "Ignoring optional notification: NotificationMessage(method=\$/foo1, params=null)")
-            logMessages.await(Level.INFO, "Ignoring optional request: RequestMessage(id=\"1\", method=\$/foo2, params=null)")
+            logMessages.await(
+                Level.INFO,
+                "Ignoring optional notification: NotificationMessage(method=\$/foo1, params=null)"
+            )
+            logMessages.await(
+                Level.INFO,
+                "Ignoring optional request: RequestMessage(id=\"1\", method=\$/foo2, params=null)"
+            )
 
             val actual = out.toString().removeContentLengthAndParse(89)
             assertEquals(

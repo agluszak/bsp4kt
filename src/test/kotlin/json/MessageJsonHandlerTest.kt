@@ -11,9 +11,9 @@
  */
 package json
 
-import com.jetbrains.bsp.json.JsonRpcMethod
-import com.jetbrains.bsp.json.MessageJsonHandler
-import com.jetbrains.bsp.messages.*
+import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
+import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
+import com.jetbrains.jsonrpc4kt.messages.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.Assertions.*

@@ -1,10 +1,10 @@
 import ExtendableConcurrentMessageProcessorTest.*
 import ExtendableConcurrentMessageProcessorTest.MessageContextStore.MessageContext
-import com.jetbrains.bsp.Launcher
-import com.jetbrains.bsp.MessageConsumer
-import com.jetbrains.bsp.MessageProducer
-import com.jetbrains.bsp.json.ConcurrentMessageProcessor
-import com.jetbrains.bsp.services.JsonRequest
+import com.jetbrains.jsonrpc4kt.Launcher
+import com.jetbrains.jsonrpc4kt.MessageConsumer
+import com.jetbrains.jsonrpc4kt.MessageProducer
+import com.jetbrains.jsonrpc4kt.json.ConcurrentMessageProcessor
+import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.serialization.Serializable
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse

@@ -1,6 +1,6 @@
 package json
 
-import com.jetbrains.bsp.messages.*
+import com.jetbrains.jsonrpc4kt.messages.*
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.json.*
 import kotlinx.serialization.serializer

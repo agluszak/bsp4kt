@@ -1,9 +1,9 @@
 package annotations
 
 import annotations.EndpointsTest.*
-import com.jetbrains.bsp.Endpoint
-import com.jetbrains.bsp.json.JsonRpcMethod
-import com.jetbrains.bsp.services.*
+import com.jetbrains.jsonrpc4kt.Endpoint
+import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
+import com.jetbrains.jsonrpc4kt.services.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 

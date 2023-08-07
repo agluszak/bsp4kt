@@ -1,2 +1,2 @@
-rootProject.name = "bsp4kt"
+rootProject.name = "jsonrpc4kt"
 

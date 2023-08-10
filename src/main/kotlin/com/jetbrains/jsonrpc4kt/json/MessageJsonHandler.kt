@@ -81,6 +81,7 @@ class MessageJsonHandler(val json: Json, val supportedMethods: Map<String, JsonR
                     else -> JsonParams.ArrayParams(JsonArray(listOf(jsonElement)))
                 }
             }
+
             else -> {
                 val list = params.zip(jsonRpcMethod.parameterTypes).map {
                     serialize(it.first, it.second)

@@ -80,7 +80,7 @@ class MessageJsonHandlerTest {
         val handler = MessageJsonHandler(Json.Default, supportedMethods)
 
         val message: Message = handler.deserializeMessage(
-           """
+            """
                {
                 "jsonrpc":"2.0",
                 "id":"2",

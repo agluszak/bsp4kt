@@ -10,6 +10,7 @@ import com.jetbrains.jsonrpc4kt.messages.Message.Companion.JSON_MIME_TYPE
 import java.io.IOException
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.locks.ReentrantLock
 
 
 /**
@@ -18,9 +19,7 @@ import java.nio.charset.StandardCharsets
 class StreamMessageConsumer(
     var output: OutputStream?, private val encoding: String, private val jsonHandler: MessageJsonHandler
 ) : MessageConsumer {
-    private val outputLock = Any()
-
-    constructor(jsonHandler: MessageJsonHandler) : this(null, StandardCharsets.UTF_8.name(), jsonHandler)
+    private val outputLock = ReentrantLock()
     constructor(output: OutputStream?, jsonHandler: MessageJsonHandler) : this(
         output, StandardCharsets.UTF_8.name(), jsonHandler
     )
@@ -32,10 +31,13 @@ class StreamMessageConsumer(
             val contentLength = contentBytes.size
             val header = getHeader(contentLength)
             val headerBytes = header.toByteArray(StandardCharsets.US_ASCII)
-            synchronized(outputLock) {
+            outputLock.lock()
+            try {
                 output!!.write(headerBytes)
                 output!!.write(contentBytes)
                 output!!.flush()
+            } finally {
+                outputLock.unlock()
             }
         } catch (exception: IOException) {
             throw JsonRpcException(exception)

@@ -33,7 +33,7 @@ class LauncherTest() {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testDone() {
         val a: A = object : A {
             override fun say(p: Param) {}
@@ -49,7 +49,7 @@ class LauncherTest() {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testCanceled() {
         val a: A = object : A {
             override fun say(p: Param) {}
@@ -72,7 +72,7 @@ class LauncherTest() {
     }
 
 //    @Test
-//    @Throws(Exception::class)
+//    
 //    fun testCustomGson() {
 //        val a: A = object : A {
 //            override fun say(p: Param) {}
@@ -112,7 +112,7 @@ class LauncherTest() {
 
     // TODO: not needed
 //    @Test
-//    @Throws(Exception::class)
+//    
 //    fun testMultipleServices() {
 //        val paramA = arrayOfNulls<String>(1)
 //        val a: A = object : A {

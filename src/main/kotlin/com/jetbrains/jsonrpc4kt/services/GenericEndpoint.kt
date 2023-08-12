@@ -4,13 +4,12 @@ import com.jetbrains.jsonrpc4kt.Endpoint
 import com.jetbrains.jsonrpc4kt.ResponseErrorException
 import com.jetbrains.jsonrpc4kt.messages.ResponseError
 import com.jetbrains.jsonrpc4kt.messages.ResponseErrorCode
-import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.CompletableFuture
-import java.util.function.Function
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
+import kotlin.reflect.full.callSuspend
 import kotlin.reflect.jvm.jvmName
 
 /**
@@ -18,7 +17,8 @@ import kotlin.reflect.jvm.jvmName
  * [JsonRequest] methods of one or more given delegate objects.
  */
 class GenericEndpoint<T>(delegate: T) : Endpoint {
-    private val methodHandlers = LinkedHashMap<String, Function<List<Any?>, CompletableFuture<*>?>>()
+    private val requestHandlers = LinkedHashMap<String, (List<Any?>) -> suspend () -> Any?>()
+    private val notificationHandlers = LinkedHashMap<String, (List<Any?>) -> Unit>()
 
     init {
         recursiveFindRpcMethods(delegate, HashSet())
@@ -27,8 +27,8 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
     private fun recursiveFindRpcMethods(current: T, visited: MutableSet<KClass<*>>) {
         AnnotationUtil.findRpcMethods(current!!::class, visited) { methodInfo ->
             val handler =
-                Function { args: List<Any?> ->
-                    try {
+                { args: List<Any?> ->
+                    suspend {
                         val method: KFunction<*> = methodInfo.method
                         val argumentCount = args.size
                         val parameterCount = method.parameters.size - 1 // -1 for the receiver
@@ -46,20 +46,12 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
                             }
                         }
 
-                        val result = method.call(current, *arguments.toTypedArray())
-                        if (result is CompletableFuture<*>) {
-                            return@Function result
-                        } else {
-                            return@Function null
-                        }
-                    } catch (e: InvocationTargetException) {
-                        throw RuntimeException(e)
-                    } catch (e: IllegalAccessException) {
-                        throw RuntimeException(e)
+
+                        method.callSuspend(current, *arguments.toTypedArray())
                     }
                 }
             check(
-                methodHandlers.put(
+                requestHandlers.put(
                     methodInfo.name,
                     handler
                 ) == null
@@ -67,11 +59,11 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
         }
     }
 
-    override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+    override suspend fun request(method: String, params: List<Any?>): Any? {
         // Check the registered method handlers
-        val handler = methodHandlers[method]
+        val handler = requestHandlers[method]
         if (handler != null) {
-            return handler.apply(params)!!
+            return handler(params).invoke()
         }
 
         // TODO: remove
@@ -79,20 +71,18 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
         val message = "Unsupported request method: $method"
         if (isOptionalMethod(method)) {
             LOG.log(Level.INFO, message)
-            return CompletableFuture.completedFuture<Any?>(null)
+            return null
         }
         LOG.log(Level.WARNING, message)
-        val exceptionalResult: CompletableFuture<*> = CompletableFuture<Any>()
         val error = ResponseError(ResponseErrorCode.MethodNotFound.code, message, null)
-        exceptionalResult.completeExceptionally(ResponseErrorException(error))
-        return exceptionalResult
+        throw ResponseErrorException(error)
     }
 
     override fun notify(method: String, params: List<Any?>) {
         // Check the registered method handlers
-        val handler = methodHandlers[method]
+        val handler = notificationHandlers[method]
         if (handler != null) {
-            handler.apply(params)
+            handler(params)
             return
         }
 

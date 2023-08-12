@@ -36,7 +36,7 @@
 //    }
 //
 //    @Test
-//    @Throws(Exception::class)
+//    
 //    fun testStopOnInterrrupt() {
 //        executorService!!.submit {
 //            val input: InputStream = object : InputStream() {
@@ -53,7 +53,7 @@
 //    }
 //
 //    @Test
-//    @Throws(Exception::class)
+//    
 //    fun testStopOnChannelClosed() {
 //        executorService!!.submit {
 //            val input: InputStream = object : InputStream() {

@@ -3,13 +3,13 @@ package com.jetbrains.jsonrpc4kt
 import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
 import com.jetbrains.jsonrpc4kt.json.MethodProvider
 import com.jetbrains.jsonrpc4kt.messages.*
+import kotlinx.coroutines.*
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.ByteArrayOutputStream
 import java.io.PrintWriter
 import java.lang.reflect.InvocationTargetException
-import java.util.concurrent.CancellationException
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CompletionException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Function
 import java.util.logging.Level
@@ -34,15 +34,15 @@ class RemoteEndpoint(
 ) :
     Endpoint, MessageConsumer, MethodProvider {
     private val nextRequestId = AtomicInteger()
-    private val sentRequestMap: MutableMap<MessageId, PendingRequestInfo> = LinkedHashMap()
-    private val receivedRequestMap: MutableMap<MessageId, CompletableFuture<*>> = LinkedHashMap()
+    private val sentRequestMap: MutableMap<MessageId, PendingRequestInfo> = ConcurrentHashMap()
+    private val receivedRequestMap: MutableMap<MessageId, CompletableDeferred<*>> = ConcurrentHashMap()
 
     /**
      * Information about requests that have been sent and for which no response has been received yet.
      */
     private data class PendingRequestInfo(
         val requestMessage: RequestMessage,
-        val future: CompletableFuture<Any?>
+        val future: CompletableDeferred<Any?>
     )
 
     /**
@@ -69,22 +69,18 @@ class RemoteEndpoint(
     /**
      * Send a request to the remote endpoint.
      */
-    override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
+    override suspend fun request(method: String, params: List<Any?>): Any? {
         val serializedParams = jsonHandler.serializeParams(method, params)
         val requestMessage: RequestMessage = createRequestMessage(method, serializedParams)
-        val result: CompletableFuture<Any?> = object : CompletableFuture<Any?>() {
-            override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
+        val result: CompletableDeferred<Any?> = CompletableDeferred(currentCoroutineContext().job)
+        result.invokeOnCompletion {
+            if (it is CancellationException) {
                 sendCancelNotification(requestMessage.id)
-                return super.cancel(mayInterruptIfRunning)
             }
         }
-        synchronized(sentRequestMap) {
-            // Store request information so it can be handled when the response is received
-            sentRequestMap.put(
-                requestMessage.id,
-                PendingRequestInfo(requestMessage, result)
-            )
-        }
+
+        // Store request information so it can be handled when the response is received
+        sentRequestMap[requestMessage.id] = PendingRequestInfo(requestMessage, result)
         try {
             // Send the request to the remote service
             out.consume(requestMessage)
@@ -92,7 +88,7 @@ class RemoteEndpoint(
             // The message could not be sent, e.g. because the communication channel was closed
             result.completeExceptionally(exception)
         }
-        return result
+        return result.await()
     }
 
     private fun createRequestMessage(method: String, params: JsonParams?): RequestMessage {
@@ -116,7 +112,9 @@ class RemoteEndpoint(
             }
 
             is RequestMessage -> {
-                handleRequest(message)
+                runBlocking {
+                    handleRequest(message)
+                }
             }
 
             is ResponseMessage -> {
@@ -126,24 +124,23 @@ class RemoteEndpoint(
     }
 
     private fun handleResponse(responseMessage: ResponseMessage) {
-        var requestInfo: PendingRequestInfo?
-        synchronized(sentRequestMap) { requestInfo = sentRequestMap.remove(responseMessage.id) }
+        val requestInfo = sentRequestMap.remove(responseMessage.id)
         if (requestInfo == null) {
             // We have no pending request information that matches the id given in the response
             LOG.info { "Unmatched response message: $responseMessage" }
         } else when (responseMessage) {
             is ResponseMessage.Error ->
                 // The remote service has replied with an error
-                requestInfo!!.future.completeExceptionally(ResponseErrorException(responseMessage.error))
+                requestInfo.future.completeExceptionally(ResponseErrorException(responseMessage.error))
 
             is ResponseMessage.Result -> {
                 // The remote service has replied with a result object
                 try {
                     val deserialized =
-                        jsonHandler.deserializeResult(requestInfo!!.requestMessage.method, responseMessage.result)
-                    requestInfo!!.future.complete(deserialized)
+                        jsonHandler.deserializeResult(requestInfo.requestMessage.method, responseMessage.result)
+                    requestInfo.future.complete(deserialized)
                 } catch (exception: MessageIssueException) {
-                    requestInfo!!.future.completeExceptionally(exception)
+                    requestInfo.future.completeExceptionally(exception)
                     return
                 }
 
@@ -196,11 +193,9 @@ class RemoteEndpoint(
             val cancelParam = cancelParams[0]
             if (cancelParam != null) {
                 if (cancelParam is CancelParams) {
-                    synchronized(receivedRequestMap) {
-                        val id = cancelParam.id
-                        val future = receivedRequestMap[id]
-                        future?.cancel(true) ?: LOG.info { "Unmatched cancel notification for request id $id" }
-                    }
+                    val id = cancelParam.id
+                    val future = receivedRequestMap[id]
+                    future?.cancel() ?: LOG.info { "Unmatched cancel notification for request id $id" }
                     return true
                 } else {
                     LOG.info { "Cancellation support is disabled, since the '${MessageJsonHandler.CANCEL_METHOD.methodName}' method has been registered explicitly." }
@@ -215,13 +210,25 @@ class RemoteEndpoint(
     private fun isOptional(message: IncomingMessage): Boolean =
         message.method.startsWith("$/")
 
-    private fun handleRequest(requestMessage: RequestMessage) {
-        var future: CompletableFuture<*>
+    private suspend fun handleRequest(requestMessage: RequestMessage) {
+        val deferred = CompletableDeferred<Any?>() // TODO: make sure it doesn't need to have a parent job
         val messageId = requestMessage.id
+        receivedRequestMap[messageId] = deferred
         try {
             val params = jsonHandler.deserializeParams(requestMessage)
             // Forward the request to the local endpoint
-            future = localEndpoint.request(requestMessage.method, params)
+            val result = localEndpoint.request(requestMessage.method, params)
+            deferred.complete(result)
+            val serializedResult = jsonHandler.serializeResult(requestMessage.method, result)
+            out.consume(ResponseMessage.Result(messageId, serializedResult))
+        } catch (e: CancellationException) {
+            val message =
+                "The request (id: " + messageId + ", method: '" + requestMessage.method + "') has been cancelled"
+            val errorObject =
+                ResponseError(ResponseErrorCode.RequestCancelled.code, message, null)
+
+            val response = ResponseMessage.Error(messageId, errorObject)
+            out.consume(response)
         } catch (e: MessageIssueException) {
             if (e.issue is NoSuchMethod && isOptional(requestMessage)) {
                 LOG.info { "Ignoring optional request: $requestMessage" }
@@ -230,43 +237,13 @@ class RemoteEndpoint(
                 // There was an issue with the request - reply with an error response
             }
             out.consume(ResponseMessage.Error(messageId, e.issue.toErrorResponse()))
-            return
         } catch (throwable: Throwable) {
             // The local endpoint has failed handling the request - reply with an error response
             val errorObject: ResponseError = exceptionHandler.apply(throwable)
             out.consume(ResponseMessage.Error(messageId, errorObject))
             if (throwable is Error) throw throwable else return
-        }
-
-        synchronized(receivedRequestMap) { receivedRequestMap.put(messageId, future) }
-        future.thenAccept { result: Any? ->
-            try {
-                val serializedResult = jsonHandler.serializeResult(requestMessage.method, result)
-                // Reply with the result object that was computed by the local endpoint
-                out.consume(ResponseMessage.Result(messageId, serializedResult))
-            } catch (e: MessageIssueException) {
-                logMessageIssue(requestMessage, e)
-                // There was an issue with the request - reply with an error response
-                out.consume(ResponseMessage.Error(messageId, e.issue.toErrorResponse()))
-            }
-        }.exceptionally { t: Throwable ->
-            val errorObject = if (isCancellation(t)) {
-                val message =
-                    "The request (id: " + messageId + ", method: '" + requestMessage.method + "') has been cancelled"
-                ResponseError(ResponseErrorCode.RequestCancelled.code, message, null)
-            } else if (t is MessageIssueException) {
-                // There was an issue with the request - reply with an error response
-                t.issue.toErrorResponse()
-            } else {
-                // The local endpoint has failed to compute a result - reply with an error response
-                exceptionHandler.apply(t)
-            }
-            val response = ResponseMessage.Error(messageId, errorObject)
-            out.consume(response)
-            null
-        }.thenApply<Any?> {
-            synchronized(receivedRequestMap) { receivedRequestMap.remove(messageId) }
-            null
+        } finally {
+            receivedRequestMap.remove(messageId)
         }
     }
 

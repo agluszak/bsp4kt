@@ -40,10 +40,10 @@ class EndpointsTest {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testProxy_01() {
         val endpoint: Endpoint = object : Endpoint {
-            override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+            override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
                 assertEquals("foo/doStuff", method)
                 assertEquals("param", params[0])
                 return CompletableFuture.completedFuture("result")
@@ -60,10 +60,10 @@ class EndpointsTest {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testProxy_02() {
         val endpoint: Endpoint = object : Endpoint {
-            override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+            override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
                 assertEquals("bar/doStuff2", method)
                 assertEquals("[param, 2]", params.toString())
                 return CompletableFuture.completedFuture("result")
@@ -80,10 +80,10 @@ class EndpointsTest {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testBackAndForth() {
         val endpoint: Endpoint = object : Endpoint {
-            override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+            override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
                 assertEquals("foo/doStuff", method)
                 assertEquals("param", params[0])
                 return CompletableFuture.completedFuture("result")
@@ -102,7 +102,7 @@ class EndpointsTest {
     }
 
 //    @Test
-//    @Throws(Exception::class)
+//    
 //    fun testMultipleInterfaces() {
 //        val requests: MutableMap<String, Any?> = HashMap()
 //        val notifications: MutableMap<String, Any?> = HashMap()

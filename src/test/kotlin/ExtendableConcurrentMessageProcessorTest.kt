@@ -31,7 +31,7 @@ class ExtendableConcurrentMessageProcessorTest {
      * identify which client is making any given request.
      */
     @Test
-    @Throws(Exception::class)
+    
     fun testIdentifyClientRequest() {
         val contextStore = MessageContextStore<MyClient>()
         val testContext = TestContextWrapper<MyServer, MyClient>(contextStore)

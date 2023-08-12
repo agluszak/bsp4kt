@@ -5,16 +5,17 @@ import com.jetbrains.jsonrpc4kt.RemoteEndpoint
 import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
 import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
 import com.jetbrains.jsonrpc4kt.messages.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.net.SocketException
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.ExecutionException
-import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 import kotlin.reflect.typeOf
+import kotlin.test.assertFailsWith
 
 class RemoteEndpointTest {
 
@@ -26,19 +27,22 @@ class RemoteEndpointTest {
     )
 
     internal open class TestEndpoint(val jsonHandler: MessageJsonHandler) : Endpoint {
-        var notifications: MutableList<NotificationMessage> = ArrayList<NotificationMessage>()
-        var requests: MutableMap<RequestMessage, CompletableFuture<Any?>> = LinkedHashMap()
+        var notifications: MutableList<NotificationMessage> = ArrayList()
+        var requests: MutableMap<RequestMessage, CompletableDeferred<Any?>> = LinkedHashMap()
 
         override fun notify(method: String, params: List<Any?>) {
             val serializedParams = jsonHandler.serializeParams(method, params)
             notifications.add(NotificationMessage(method, serializedParams))
         }
 
-        override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
-            val completableFuture = CompletableFuture<Any?>()
+        override suspend fun request(method: String, params: List<Any?>): Any? {
+            val completableDeferred = CompletableDeferred<Any?>(
+                currentCoroutineContext().job
+            )
             val serializedParams = jsonHandler.serializeParams(method, params)
-            requests[RequestMessage(MessageId.StringId("asd"), method, serializedParams)] = completableFuture
-            return completableFuture
+            requests[RequestMessage(MessageId.StringId("asd"), method, serializedParams)] = completableDeferred
+
+            return completableDeferred.await()
         }
     }
 
@@ -62,7 +66,7 @@ class RemoteEndpointTest {
     }
 
     @Test
-    fun testRequest1() {
+    fun testRequest1() = runTest {
         val endp = TestEndpoint(jsonHandler)
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
@@ -92,13 +96,26 @@ class RemoteEndpointTest {
     }
 
     @Test
-    fun testCancellation() {
+    fun testCompletion() = runTest {
+        val endp = TestEndpoint(jsonHandler)
+        val consumer = TestMessageConsumer()
+        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
+        launch {
+            delay(1000)
+            endpoint.consume(ResponseMessage.Result(MessageId.NumberId(1), JsonPrimitive("success")))
+        }
+        val result = endpoint.request("request", listOf("myparam"))
+        assertEquals("success", result)
+    }
+
+    @Test
+    fun testCancellation() = runTest {
         val endp = TestEndpoint(jsonHandler)
         val consumer = TestMessageConsumer()
         val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
         endpoint.consume(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
         val (_, value) = endp.requests.entries.iterator().next()
-        value.cancel(true)
+        value.cancel()
         val message = consumer.messages[0] as ResponseMessage.Error
         val error = message.error
         assertEquals(error.code, ResponseErrorCode.RequestCancelled.code)
@@ -111,7 +128,7 @@ class RemoteEndpointTest {
     fun testExceptionInEndpoint() {
         LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
             val endp: TestEndpoint = object : TestEndpoint(jsonHandler) {
-                override fun request(method: String, params: List<Any?>): CompletableFuture<Any?> {
+                override suspend fun request(method: String, params: List<Any?>): Any? {
                     throw RuntimeException("BAAZ")
                 }
             }
@@ -134,46 +151,16 @@ class RemoteEndpointTest {
     }
 
     @Test
-    @Throws(Exception::class)
-    fun testExceptionInConsumer() {
+    fun testExceptionInConsumer() = runTest {
         val endp = TestEndpoint(jsonHandler)
-        val consumer = MessageConsumer { message -> throw RuntimeException("BAAZ") }
+        val consumer = MessageConsumer { _ -> throw RuntimeException("BAAZ") }
         val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-        val future: CompletableFuture<Any?> = endpoint.request("request", listOf("myparam"))
-        future.whenComplete { result: Any?, exception: Throwable ->
-            assertNull(result)
-            assertNotNull(exception)
-            assertEquals("BAAZ", exception.message)
-        }
-        try {
-            future[TIMEOUT, TimeUnit.MILLISECONDS]
-            fail("Expected an ExecutionException.") as Any
-        } catch (exception: ExecutionException) {
-            assertEquals("java.lang.RuntimeException: BAAZ", exception.message)
+        assertFailsWith<RuntimeException>("BAAZ") {
+            endpoint.request("request", listOf("myparam"))
         }
     }
 
     @Test
-    @Throws(Exception::class)
-    fun testExceptionInCompletableFuture() {
-        val endp = TestEndpoint(jsonHandler)
-        val consumer = TestMessageConsumer()
-        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-        val future: CompletableFuture<Any?> = endpoint.request("request", listOf("myparam"))
-        val chained = future.thenAccept { _ ->
-            throw RuntimeException("BAAZ")
-        }
-        endpoint.consume(ResponseMessage.Result(MessageId.NumberId(1), JsonPrimitive("success")))
-        try {
-            chained.get(TIMEOUT, TimeUnit.MILLISECONDS)
-            fail("Expected an ExecutionException.")
-        } catch (exception: ExecutionException) {
-            assertEquals("java.lang.RuntimeException: BAAZ", exception.message)
-        }
-    }
-
-    @Test
-    @Throws(Exception::class)
     fun testExceptionInOutputStream() {
         LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
             val endp = TestEndpoint(jsonHandler)
@@ -186,7 +173,6 @@ class RemoteEndpointTest {
     }
 
     @Test
-    @Throws(Exception::class)
     fun testOutputStreamClosed() {
         LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
             val endp = TestEndpoint(jsonHandler)
@@ -195,9 +181,5 @@ class RemoteEndpointTest {
             endpoint.notify("foo", listOf(null))
             logMessages.await(Level.WARNING, "Error while processing the message")
         }
-    }
-
-    companion object {
-        private const val TIMEOUT: Long = 2000
     }
 }

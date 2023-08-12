@@ -2,9 +2,11 @@ package com.jetbrains.jsonrpc4kt.services
 
 import com.jetbrains.jsonrpc4kt.Endpoint
 import java.lang.reflect.InvocationHandler
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.*
+import kotlin.coroutines.Continuation
 import kotlin.reflect.KClass
 
 
@@ -19,15 +21,10 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
     private val methodInfos: LinkedHashMap<String, AnnotationUtil.MethodInfo>
 
     init {
-        try {
-            object_equals = Any::class.java.getDeclaredMethod("equals", Any::class.java)
-            object_hashCode = Any::class.java.getDeclaredMethod("hashCode")
-            object_toString = Any::class.java.getDeclaredMethod("toString")
-        } catch (exception: NoSuchMethodException) {
-            throw RuntimeException(exception)
-        } catch (exception: SecurityException) {
-            throw RuntimeException(exception)
-        }
+        object_equals = Any::class.java.getDeclaredMethod("equals", Any::class.java)
+        object_hashCode = Any::class.java.getDeclaredMethod("hashCode")
+        object_toString = Any::class.java.getDeclaredMethod("toString")
+    
         methodInfos = LinkedHashMap<String, AnnotationUtil.MethodInfo>()
         AnnotationUtil.findRpcMethods(remoteInterface, HashSet()) { methodInfo ->
             check(
@@ -38,16 +35,41 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
         }
     }
 
+    internal inline fun handleInvocationTargetException(action: () -> Any?): Any? = try {
+        action()
+    } catch (e: InvocationTargetException) {
+        throw e.cause!!
+    }
+
+    internal fun invokeSuspendFunction(
+        continuation: Continuation<*>,
+        suspendFunction: suspend () -> Any?,
+    ): Any? = handleInvocationTargetException {
+        @Suppress("UNCHECKED_CAST") (suspendFunction as (Continuation<*>) -> Any?)(continuation)
+    }
+
     @Throws(Throwable::class)
     override fun invoke(proxy: Any, method: Method, args: Array<Any?>?): Any? {
         val argsList = args?.toList() ?: emptyList()
         val methodInfo: AnnotationUtil.MethodInfo? = methodInfos[method.name]
         if (methodInfo != null) {
             if (methodInfo.isNotification) {
-                delegate.notify(methodInfo.name, argsList)
+                handleInvocationTargetException {
+                    delegate.notify(methodInfo.name, argsList)
+                }
                 return null
             }
-            return delegate.request(methodInfo.name, argsList)
+
+            require(methodInfo.method.isSuspend)
+            val continuation = argsList.lastOrNull() as? Continuation<*>
+                ?: throw IllegalArgumentException("Last argument must be a Continuation")
+            val realArguments = argsList.dropLast(1)
+
+            return invokeSuspendFunction(continuation) {
+                handleInvocationTargetException {
+                    delegate.request(methodInfo.name, realArguments)
+                }
+            }
         }
         if (object_equals == method && argsList.size == 1) {
             if (argsList[0] != null) {

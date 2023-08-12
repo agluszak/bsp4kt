@@ -5,6 +5,7 @@ import com.jetbrains.jsonrpc4kt.RemoteEndpoint
 import com.jetbrains.jsonrpc4kt.services.GenericEndpoint
 import com.jetbrains.jsonrpc4kt.services.JsonNotification
 import com.jetbrains.jsonrpc4kt.services.JsonRequest
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.util.concurrent.CompletableFuture
@@ -147,7 +148,7 @@ class GenericEndpointTest {
     }
 
 
-    fun testSingleParams(params: List<Any?>, expectedString: String?, predicate: Predicate<String>? = null) {
+    fun testSingleParams(params: List<Any?>, expectedString: String?, predicate: Predicate<String>? = null) = runTest {
         LogMessageAccumulator(GenericEndpoint::class).use { logMessages ->
             val endpoint = GenericEndpoint(object : Any() {
                 @JsonRequest
@@ -155,7 +156,7 @@ class GenericEndpointTest {
                     return CompletableFuture.completedFuture(stringValue)
                 }
             })
-            assertEquals(expectedString, endpoint.request("getStringValue", params).get())
+            assertEquals(expectedString, endpoint.request("getStringValue", params))
             predicate?.let { logMessages.await { r -> Level.WARNING === r.level && predicate.test(r.message) } }
         }
     }
@@ -185,7 +186,7 @@ class GenericEndpointTest {
 
     fun testMultiParams(
         params: List<Any?>, expectedString: String?, expectedInt: Int?, predicate: Predicate<String>? = null
-    ) {
+    ) = runTest {
         LogMessageAccumulator(GenericEndpoint::class).use { logMessages ->
             val endpoint = GenericEndpoint(object : Any() {
                 var stringValue: String? = null
@@ -210,8 +211,8 @@ class GenericEndpointTest {
             endpoint.notify("myNotification", params)
             predicate?.let { logMessages.await { r -> Level.WARNING === r.level && predicate.test(r.message) } }
 
-            assertEquals(expectedString, endpoint.request("getStringValue", listOf(null)).get())
-            assertEquals(expectedInt, endpoint.request("getIntValue", listOf(null)).get())
+            assertEquals(expectedString, endpoint.request("getStringValue", listOf(null)))
+            assertEquals(expectedInt, endpoint.request("getIntValue", listOf(null)))
         }
     }
 }

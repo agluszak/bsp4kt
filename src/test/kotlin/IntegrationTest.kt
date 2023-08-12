@@ -51,7 +51,7 @@ class IntegrationTest {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testBothDirectionRequests() {
         // create client side
         val `in` = PipedInputStream()
@@ -190,7 +190,7 @@ class IntegrationTest {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun `client-side cancellation works`() {
         // create client side
         val `in` = PipedInputStream()
@@ -379,7 +379,7 @@ class IntegrationTest {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testUnknownOptionalMessages() {
         // intercept log messages
         LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
@@ -420,7 +420,7 @@ class IntegrationTest {
     }
 
     @Test
-    @Throws(Exception::class)
+    
     fun testUnexpectedParams() {
         LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
 

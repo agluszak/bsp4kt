@@ -1,9 +1,11 @@
 package com.jetbrains.jsonrpc4kt.json
 
-import com.jetbrains.jsonrpc4kt.*
+import com.jetbrains.jsonrpc4kt.JsonRpcException
 import com.jetbrains.jsonrpc4kt.messages.Message
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_LENGTH_HEADER
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_TYPE_HEADER
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.serialization.SerializationException
 import java.io.Closeable
 import java.io.IOException
@@ -19,9 +21,10 @@ import kotlin.reflect.jvm.jvmName
  * A message producer that reads from an input stream and parses messages from JSON.
  */
 class StreamMessageProducer(
-    var input: InputStream,
+    private val input: InputStream,
     private val jsonHandler: MessageJsonHandler,
-) : MessageProducer, Closeable {
+    private val messageChannel: SendChannel<Message>,
+) : Closeable {
 
     private var keepRunning = false
 
@@ -30,10 +33,7 @@ class StreamMessageProducer(
         var charset: String = StandardCharsets.UTF_8.name()
     )
 
-    override fun listen(messageConsumer: MessageConsumer) {
-        if (keepRunning) {
-            throw IllegalStateException("This StreamMessageProducer is already running.")
-        }
+    fun start(coroutineScope: CoroutineScope): Job = coroutineScope.launch {
         keepRunning = true
         try {
             var headerBuilder: StringBuilder? = null
@@ -41,7 +41,9 @@ class StreamMessageProducer(
             var newLine = false
             var headers = Headers()
             while (keepRunning) {
-                val c = input.read()
+                val c = withContext(Dispatchers.IO) {
+                    input.read()
+                }
                 if (c == -1) {
                     // End of input stream has been reached
                     keepRunning = false
@@ -58,7 +60,7 @@ class StreamMessageProducer(
                                     )
                                 )
                             } else {
-                                val result = handleMessage(input, headers, messageConsumer)
+                                val result = handleMessage(headers)
                                 if (!result) keepRunning = false
                             }
                             headers = Headers()
@@ -84,6 +86,7 @@ class StreamMessageProducer(
             } else throw JsonRpcException(exception)
         } finally {
             keepRunning = false
+            messageChannel.close()
         }
     }
 
@@ -135,20 +138,21 @@ class StreamMessageProducer(
      *
      * @return `true` if we should continue reading from the input stream, `false` if we should stop
      */
-    @Throws(IOException::class)
-    private fun handleMessage(input: InputStream, headers: Headers, messageConsumer: MessageConsumer): Boolean {
+    private suspend fun handleMessage(headers: Headers): Boolean {
         try {
             val contentLength = headers.contentLength
             val buffer = ByteArray(contentLength)
             var bytesRead = 0
             while (bytesRead < contentLength) {
-                val readResult = input.read(buffer, bytesRead, contentLength - bytesRead)
+                val readResult = withContext(Dispatchers.IO) {
+                    input.read(buffer, bytesRead, contentLength - bytesRead)
+                }
                 if (readResult == -1) return false
                 bytesRead += readResult
             }
             val content = String(buffer, charset(headers.charset))
             val message: Message = jsonHandler.deserializeMessage(content)
-            messageConsumer.consume(message)
+            messageChannel.send(message)
         } catch (e: UnsupportedEncodingException) {
             // UnsupportedEncodingException can be thrown by String constructor
             logException(e)
@@ -164,6 +168,8 @@ class StreamMessageProducer(
 
     override fun close() {
         keepRunning = false
+        input.close()
+        messageChannel.close()
     }
 
     companion object {

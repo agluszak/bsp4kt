@@ -2,6 +2,9 @@ package com.jetbrains.jsonrpc4kt.json
 
 import com.jetbrains.jsonrpc4kt.MessageConsumer
 import com.jetbrains.jsonrpc4kt.MessageProducer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import java.io.Closeable
 import java.io.IOException
 import java.util.concurrent.*
@@ -13,15 +16,8 @@ import kotlin.reflect.jvm.jvmName
 /**
  * This class connects a message producer with a message consumer by listening for new messages in a dedicated thread.
  */
-open class ConcurrentMessageProcessor(messageProducer: MessageProducer, messageConsumer: MessageConsumer) : Runnable {
+class ConcurrentMessageProcessor(private val messageProducer: MessageProducer, private val messageConsumer: MessageConsumer) {
     private var isRunning = false
-    private val messageProducer: MessageProducer
-    private val messageConsumer: MessageConsumer
-
-    init {
-        this.messageProducer = messageProducer
-        this.messageConsumer = messageConsumer
-    }
 
     /**
      * Start a thread that listens for messages in the message producer and forwards them to the message consumer.
@@ -29,67 +25,18 @@ open class ConcurrentMessageProcessor(messageProducer: MessageProducer, messageC
      * @param executorService - the thread is started using this service
      * @return a future that is resolved when the started thread is terminated, e.g. by closing a stream
      */
-    fun beginProcessing(executorService: ExecutorService): Future<Unit> {
-        val result = executorService.submit(this)
-        return wrapFuture(result, messageProducer)
-    }
-
-    override fun run() {
-        processingStarted()
-        try {
-            messageProducer.listen(messageConsumer)
-        } catch (e: Exception) {
-            LOG.log(Level.SEVERE, e.message, e)
-        } finally {
-            processingEnded()
-        }
-    }
-
-    protected open fun processingStarted() {
+    fun beginProcessing(coroutineScope: CoroutineScope): Job {
         check(!isRunning) { "The message processor is already running." }
         isRunning = true
-    }
-
-    protected open fun processingEnded() {
-        isRunning = false
-    }
-
-    companion object {
-        fun wrapFuture(result: Future<*>, messageProducer: MessageProducer): Future<Unit> {
-            return object : Future<Unit> {
-                @Throws(InterruptedException::class, ExecutionException::class)
-                override fun get(): Unit {
-                    result.get()
-                }
-
-                @Throws(
-                    InterruptedException::class, ExecutionException::class, TimeoutException::class
-                )
-                override fun get(timeout: Long, unit: TimeUnit): Unit {
-                    result.get(timeout, unit)
-                }
-
-                override fun isDone(): Boolean {
-                    return result.isDone
-                }
-
-                override fun cancel(mayInterruptIfRunning: Boolean): Boolean {
-                    if (mayInterruptIfRunning && messageProducer is Closeable) {
-                        try {
-                            (messageProducer as Closeable).close()
-                        } catch (e: IOException) {
-                            throw RuntimeException(e)
-                        }
-                    }
-                    return result.cancel(mayInterruptIfRunning)
-                }
-
-                override fun isCancelled(): Boolean {
-                    return result.isCancelled
-                }
+        return coroutineScope.launch {
+            try {
+                messageProducer.listen(messageConsumer)
+            } catch (e: Exception) {
+                LOG.log(Level.SEVERE, e.message, e)
             }
         }
-
+    }
+    companion object {
         private val LOG = Logger.getLogger(ConcurrentMessageProcessor::class.jvmName)
     }
 }

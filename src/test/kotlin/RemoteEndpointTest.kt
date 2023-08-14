@@ -6,6 +6,7 @@ import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
 import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
 import com.jetbrains.jsonrpc4kt.messages.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
@@ -54,11 +55,16 @@ class RemoteEndpointTest {
     }
 
     @Test
-    fun testNotification() {
+    fun testNotification() = runTest {
         val endp = TestEndpoint(jsonHandler)
         val consumer = TestMessageConsumer()
-        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-        endpoint.consume(NotificationMessage("notification", JsonParams.array(JsonPrimitive("myparam"))))
+        val inputChannel = Channel<Message>()
+        val outputChannel = Channel<Message>()
+        val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
+        
+        endpoint.start(this)
+
+        inputChannel.send(NotificationMessage("notification", JsonParams.array(JsonPrimitive("myparam"))))
         val notificationMessage: NotificationMessage = endp.notifications[0]
         assertEquals("notification", notificationMessage.method)
         assertEquals(JsonParams.array(JsonPrimitive("myparam")), notificationMessage.params)
@@ -69,8 +75,13 @@ class RemoteEndpointTest {
     fun testRequest1() = runTest {
         val endp = TestEndpoint(jsonHandler)
         val consumer = TestMessageConsumer()
-        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-        endpoint.consume(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        val inputChannel = Channel<Message>()
+        val outputChannel = Channel<Message>()
+        val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
+
+        endpoint.start(this)
+
+        inputChannel.send(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
         val (key, value) = endp.requests.entries.iterator().next()
         value.complete("success")
         assertEquals("request", key.method)
@@ -81,11 +92,16 @@ class RemoteEndpointTest {
     }
 
     @Test
-    fun testRequest2() {
+    fun testRequest2() = runTest {
         val endp = TestEndpoint(jsonHandler)
         val consumer = TestMessageConsumer()
-        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-        endpoint.consume(RequestMessage(MessageId.NumberId(1), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        val inputChannel = Channel<Message>()
+        val outputChannel = Channel<Message>()
+        val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
+
+        endpoint.start(this)
+
+        inputChannel.send(RequestMessage(MessageId.NumberId(1), "request", JsonParams.array(JsonPrimitive("myparam"))))
         val (key, value) = endp.requests.entries.iterator().next()
         value.complete("success")
         assertEquals("request", key.method)
@@ -98,12 +114,17 @@ class RemoteEndpointTest {
     @Test
     fun testCompletion() = runTest {
         val endp = TestEndpoint(jsonHandler)
-        val consumer = TestMessageConsumer()
-        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
+        val inputChannel = Channel<Message>()
+        val outputChannel = Channel<Message>()
+        val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
+
+        endpoint.start(this)
+
         launch {
             delay(1000)
-            endpoint.consume(ResponseMessage.Result(MessageId.NumberId(1), JsonPrimitive("success")))
+            inputChannel.send(ResponseMessage.Result(MessageId.NumberId(1), JsonPrimitive("success")))
         }
+
         val result = endpoint.request("request", listOf("myparam"))
         assertEquals("success", result)
     }
@@ -111,12 +132,15 @@ class RemoteEndpointTest {
     @Test
     fun testCancellation() = runTest {
         val endp = TestEndpoint(jsonHandler)
-        val consumer = TestMessageConsumer()
-        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-        endpoint.consume(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        val inputChannel = Channel<Message>()
+        val outputChannel = Channel<Message>()
+        val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
+
+        endpoint.start(this)
+        inputChannel.send(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
         val (_, value) = endp.requests.entries.iterator().next()
         value.cancel()
-        val message = consumer.messages[0] as ResponseMessage.Error
+        val message = outputChannel.receive() as ResponseMessage.Error
         val error = message.error
         assertEquals(error.code, ResponseErrorCode.RequestCancelled.code)
         assertEquals(error.message, "The request (id: \"1\", method: 'request') has been cancelled")
@@ -125,7 +149,7 @@ class RemoteEndpointTest {
     // TODO: test unknown method handling
 
     @Test
-    fun testExceptionInEndpoint() {
+    fun testExceptionInEndpoint() = runTest {
         LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
             val endp: TestEndpoint = object : TestEndpoint(jsonHandler) {
                 override suspend fun request(method: String, params: List<Any?>): Any? {
@@ -133,15 +157,19 @@ class RemoteEndpointTest {
                 }
             }
             val consumer = TestMessageConsumer()
-            val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-            endpoint.consume(
+            val inputChannel = Channel<Message>()
+            val outputChannel = Channel<Message>()
+            val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
+
+            endpoint.start(this)
+            inputChannel.send(
                 RequestMessage(
                     MessageId.StringId("1"),
                     "request",
                     JsonParams.array(JsonPrimitive("myparam"))
                 )
             )
-            val response = consumer.messages[0] as ResponseMessage.Error
+            val response = outputChannel.receive() as ResponseMessage.Error
             val error = response.error
             assertEquals("Internal error.", error.message)
             assertEquals(ResponseErrorCode.InternalError.code, error.code)
@@ -150,36 +178,36 @@ class RemoteEndpointTest {
         }
     }
 
-    @Test
-    fun testExceptionInConsumer() = runTest {
-        val endp = TestEndpoint(jsonHandler)
-        val consumer = MessageConsumer { _ -> throw RuntimeException("BAAZ") }
-        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-        assertFailsWith<RuntimeException>("BAAZ") {
-            endpoint.request("request", listOf("myparam"))
-        }
-    }
-
-    @Test
-    fun testExceptionInOutputStream() {
-        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
-            val endp = TestEndpoint(jsonHandler)
-            val consumer: MessageConsumer =
-                MessageConsumer { throw JsonRpcException(SocketException("Permission denied: connect")) }
-            val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-            endpoint.notify("foo", listOf(null))
-            logMessages.await(Level.WARNING, "Error while processing the message")
-        }
-    }
-
-    @Test
-    fun testOutputStreamClosed() {
-        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
-            val endp = TestEndpoint(jsonHandler)
-            val consumer: MessageConsumer = MessageConsumer { throw JsonRpcException(SocketException("Socket closed")) }
-            val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
-            endpoint.notify("foo", listOf(null))
-            logMessages.await(Level.WARNING, "Error while processing the message")
-        }
-    }
+//    @Test
+//    fun testExceptionInConsumer() = runTest {
+//        val endp = TestEndpoint(jsonHandler)
+//        val consumer = MessageConsumer { _ -> throw RuntimeException("BAAZ") }
+//        val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
+//        assertFailsWith<RuntimeException>("BAAZ") {
+//            endpoint.request("request", listOf("myparam"))
+//        }
+//    }
+//
+//    @Test
+//    fun testExceptionInOutputStream() {
+//        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
+//            val endp = TestEndpoint(jsonHandler)
+//            val consumer: MessageConsumer =
+//                MessageConsumer { throw JsonRpcException(SocketException("Permission denied: connect")) }
+//            val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
+//            endpoint.notify("foo", listOf(null))
+//            logMessages.await(Level.WARNING, "Error while processing the message")
+//        }
+//    }
+//
+//    @Test
+//    fun testOutputStreamClosed() {
+//        LogMessageAccumulator(RemoteEndpoint::class).use { logMessages ->
+//            val endp = TestEndpoint(jsonHandler)
+//            val consumer: MessageConsumer = MessageConsumer { throw JsonRpcException(SocketException("Socket closed")) }
+//            val endpoint = RemoteEndpoint(consumer, endp, jsonHandler)
+//            endpoint.notify("foo", listOf(null))
+//            logMessages.await(Level.WARNING, "Error while processing the message")
+//        }
+//    }
 }

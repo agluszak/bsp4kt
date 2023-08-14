@@ -4,7 +4,6 @@ package com.jetbrains.jsonrpc4kt.services
 import com.jetbrains.jsonrpc4kt.Endpoint
 import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
 import java.lang.reflect.Proxy
-import java.util.concurrent.CompletableFuture
 import kotlin.reflect.KClass
 
 
@@ -46,34 +45,16 @@ object ServiceEndpoints {
     private fun getSupportedMethods(type: KClass<*>, visitedTypes: MutableSet<KClass<*>>): Map<String, JsonRpcMethod> {
         val result: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
         AnnotationUtil.findRpcMethods(type, visitedTypes) { methodInfo ->
-            val meth: JsonRpcMethod
-            if (methodInfo.isNotification) {
-                meth = JsonRpcMethod.notification(methodInfo.name, *methodInfo.parameterTypes.toTypedArray())
+            val meth: JsonRpcMethod = if (methodInfo.isNotification) {
+                JsonRpcMethod.notification(methodInfo.name, *methodInfo.parameterTypes.toTypedArray())
             } else {
-                val genericReturnType = methodInfo.method.returnType
-                if (genericReturnType.arguments.size == 1 && genericReturnType.classifier == CompletableFuture::class) {
-                    val returnType =
-                        genericReturnType.arguments[0].type
-                            ?: throw IllegalStateException("Expecting return type of CompletableFuture but was : $genericReturnType")
-//                    var responseTypeAdapter: TypeAdapterFactory? = null
-//                    val responseTypeAdapterAnnotation: ResponseJsonAdapter = methodInfo.method.getAnnotation(
-//                        ResponseJsonAdapter::class.java
-//                    )
-//                    if (responseTypeAdapterAnnotation != null) {
-//                        responseTypeAdapter = try {
-//                            responseTypeAdapterAnnotation.value().getDeclaredConstructor().newInstance()
-//                        } catch (e: ReflectiveOperationException) {
-//                            throw RuntimeException(e)
-//                        }
-//                    }
-                    meth = JsonRpcMethod.request(
-                        methodInfo.name,
-                        returnType,
-                        *methodInfo.parameterTypes.toTypedArray()
-                    )
-                } else {
-                    throw IllegalStateException("Expecting return type of CompletableFuture but was : $genericReturnType")
-                }
+                check(methodInfo.method.isSuspend) { "JsonRPC requests must use suspend functions" }
+                val returnType = methodInfo.method.returnType
+                JsonRpcMethod.request(
+                    methodInfo.name,
+                    returnType,
+                    *methodInfo.parameterTypes.toTypedArray()
+                )
             }
             check(result.put(methodInfo.name, meth) == null) { "Duplicate RPC method " + methodInfo.name + "." }
         }

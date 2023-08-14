@@ -7,6 +7,12 @@ import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_LENGTH_HEADER
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_TYPE_HEADER
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CRLF
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.JSON_MIME_TYPE
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
@@ -17,38 +23,38 @@ import java.util.concurrent.locks.ReentrantLock
  * A message consumer that serializes messages to JSON and sends them to an output stream.
  */
 class StreamMessageConsumer(
-    var output: OutputStream?, private val encoding: String, private val jsonHandler: MessageJsonHandler
-) : MessageConsumer {
-    private val outputLock = ReentrantLock()
-    constructor(output: OutputStream?, jsonHandler: MessageJsonHandler) : this(
-        output, StandardCharsets.UTF_8.name(), jsonHandler
-    )
+    private var output: OutputStream,
+    private val jsonHandler: MessageJsonHandler,
+    private val messageChannel: ReceiveChannel<Message>,
+    private val encoding: String = StandardCharsets.UTF_8.name()
+) {
+    private val mutex = Mutex()
 
-    override fun consume(message: Message) {
-        try {
-            val content = jsonHandler.serializeMessage(message)
-            val contentBytes = content.toByteArray(charset(encoding))
-            val contentLength = contentBytes.size
-            val header = getHeader(contentLength)
-            val headerBytes = header.toByteArray(StandardCharsets.US_ASCII)
-            outputLock.lock()
-            try {
-                output!!.write(headerBytes)
-                output!!.write(contentBytes)
-                output!!.flush()
-            } finally {
-                outputLock.unlock()
+    fun start(coroutineScope: CoroutineScope): Job =
+        coroutineScope.launch {
+            for (message in messageChannel) {
+                try {
+                    val content = jsonHandler.serializeMessage(message)
+                    val contentBytes = content.toByteArray(charset(encoding))
+                    val contentLength = contentBytes.size
+                    val header = getHeader(contentLength)
+                    val headerBytes = header.toByteArray(StandardCharsets.US_ASCII)
+                    mutex.withLock {
+                        output.write(headerBytes)
+                        output.write(contentBytes)
+                        output.flush()
+                    }
+                } catch (exception: IOException) {
+                    throw JsonRpcException(exception)
+                }
             }
-        } catch (exception: IOException) {
-            throw JsonRpcException(exception)
         }
-    }
 
     /**
      * Construct a header to be prepended to the actual content. This implementation writes
      * `Content-Length` and `Content-Type` attributes according to the LSP specification.
      */
-    protected fun getHeader(contentLength: Int): String {
+    private fun getHeader(contentLength: Int): String {
         val headerBuilder = StringBuilder()
         appendHeader(headerBuilder, CONTENT_LENGTH_HEADER, contentLength).append(CRLF)
         if (StandardCharsets.UTF_8.name() != encoding) {
@@ -62,7 +68,7 @@ class StreamMessageConsumer(
     /**
      * Append a header attribute to the given builder.
      */
-    protected fun appendHeader(builder: StringBuilder, name: String?, value: Any?): StringBuilder {
+    private fun appendHeader(builder: StringBuilder, name: String?, value: Any?): StringBuilder {
         return builder.append(name).append(": ").append(value)
     }
 }

@@ -4,6 +4,8 @@ import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
 import com.jetbrains.jsonrpc4kt.json.MethodProvider
 import com.jetbrains.jsonrpc4kt.messages.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.ByteArrayOutputStream
 import java.io.PrintWriter
@@ -27,12 +29,15 @@ import kotlin.reflect.jvm.jvmName
  */
 
 class RemoteEndpoint(
-    private val out: MessageConsumer,
+    private val `in`: ReceiveChannel<Message>,
+    private val out: SendChannel<Message>,
     private val localEndpoint: Endpoint,
     private val jsonHandler: MessageJsonHandler,
+    private val coroutineScope: CoroutineScope,
     private val exceptionHandler: Function<Throwable, ResponseError> = DEFAULT_EXCEPTION_HANDLER,
+
 ) :
-    Endpoint, MessageConsumer, MethodProvider {
+    Endpoint, MethodProvider {
     private val nextRequestId = AtomicInteger()
     private val sentRequestMap: MutableMap<MessageId, PendingRequestInfo> = ConcurrentHashMap()
     private val receivedRequestMap: MutableMap<MessageId, CompletableDeferred<*>> = ConcurrentHashMap()
@@ -45,49 +50,79 @@ class RemoteEndpoint(
         val future: CompletableDeferred<Any?>
     )
 
+    fun start(coroutineScope: CoroutineScope) = coroutineScope.launch {
+        for (message in `in`) {
+            when (message) {
+                is NotificationMessage -> {
+                    handleNotification(message)
+                }
+
+                is RequestMessage -> {
+                    handleRequest(message)
+                }
+
+                is ResponseMessage -> {
+                    handleResponse(message)
+                }
+            }
+        }
+        out.close()
+    }
+
     /**
      * Send a notification to the remote endpoint.
      */
     override fun notify(method: String, params: List<Any?>) {
-        try {
-            val serializedParams = jsonHandler.serializeParams(method, params)
-            val notificationMessage = NotificationMessage(method, serializedParams)
+        coroutineScope.launch {
+            try {
+                val serializedParams = jsonHandler.serializeParams(method, params)
+                val notificationMessage = NotificationMessage(method, serializedParams)
 
-            out.consume(notificationMessage)
-        } catch (e: MessageIssueException) {
-            LOG.log(Level.WARNING, "Error while processing the message", e)
-        } catch (e: Exception) {
-            val level = if (JsonRpcException.indicatesStreamClosed(e)) {
-                Level.INFO
-            } else {
-                Level.WARNING
+                out.send(notificationMessage)
+            } catch (e: MessageIssueException) {
+                LOG.log(Level.WARNING, "Error while processing the message", e)
+            } catch (e: Exception) {
+                val level = if (JsonRpcException.indicatesStreamClosed(e)) {
+                    Level.INFO
+                } else {
+                    Level.WARNING
+                }
+                LOG.log(level, "Failed to send notification message", e)
             }
-            LOG.log(level, "Failed to send notification message", e)
         }
     }
+
 
     /**
      * Send a request to the remote endpoint.
      */
     override suspend fun request(method: String, params: List<Any?>): Any? {
-        val serializedParams = jsonHandler.serializeParams(method, params)
-        val requestMessage: RequestMessage = createRequestMessage(method, serializedParams)
-        val result: CompletableDeferred<Any?> = CompletableDeferred(currentCoroutineContext().job)
-        result.invokeOnCompletion {
-            if (it is CancellationException) {
-                sendCancelNotification(requestMessage.id)
+
+        val result: CompletableDeferred<Any?> = CompletableDeferred(coroutineScope.coroutineContext.job)
+
+        coroutineScope.launch {
+            val serializedParams = jsonHandler.serializeParams(method, params)
+            val requestMessage: RequestMessage = createRequestMessage(method, serializedParams)
+
+            result.invokeOnCompletion {
+                if (it is CancellationException) {
+                    sendCancelNotification(requestMessage.id)
+                }
+            }
+
+            // Store request information so it can be handled when the response is received
+            sentRequestMap[requestMessage.id] = PendingRequestInfo(requestMessage, result)
+            try {
+                // Send the request to the remote service
+                out.send(requestMessage)
+            } catch (exception: CancellationException) {
+                throw exception
+            } catch (exception: Exception) {
+                // The message could not be sent, e.g. because the communication channel was closed
+                result.completeExceptionally(exception)
             }
         }
 
-        // Store request information so it can be handled when the response is received
-        sentRequestMap[requestMessage.id] = PendingRequestInfo(requestMessage, result)
-        try {
-            // Send the request to the remote service
-            out.consume(requestMessage)
-        } catch (exception: Exception) {
-            // The message could not be sent, e.g. because the communication channel was closed
-            result.completeExceptionally(exception)
-        }
         return result.await()
     }
 
@@ -103,24 +138,6 @@ class RemoteEndpoint(
         }
         val cancelParams = CancelParams(id)
         notify(MessageJsonHandler.CANCEL_METHOD.methodName, listOf(cancelParams))
-    }
-
-    override fun consume(message: Message) {
-        when (message) {
-            is NotificationMessage -> {
-                handleNotification(message)
-            }
-
-            is RequestMessage -> {
-                runBlocking {
-                    handleRequest(message)
-                }
-            }
-
-            is ResponseMessage -> {
-                handleResponse(message)
-            }
-        }
     }
 
     private fun handleResponse(responseMessage: ResponseMessage) {
@@ -220,7 +237,7 @@ class RemoteEndpoint(
             val result = localEndpoint.request(requestMessage.method, params)
             deferred.complete(result)
             val serializedResult = jsonHandler.serializeResult(requestMessage.method, result)
-            out.consume(ResponseMessage.Result(messageId, serializedResult))
+            out.send(ResponseMessage.Result(messageId, serializedResult))
         } catch (e: CancellationException) {
             val message =
                 "The request (id: " + messageId + ", method: '" + requestMessage.method + "') has been cancelled"
@@ -228,7 +245,7 @@ class RemoteEndpoint(
                 ResponseError(ResponseErrorCode.RequestCancelled.code, message, null)
 
             val response = ResponseMessage.Error(messageId, errorObject)
-            out.consume(response)
+            out.send(response)
         } catch (e: MessageIssueException) {
             if (e.issue is NoSuchMethod && isOptional(requestMessage)) {
                 LOG.info { "Ignoring optional request: $requestMessage" }
@@ -236,11 +253,11 @@ class RemoteEndpoint(
                 logMessageIssue(requestMessage, e)
                 // There was an issue with the request - reply with an error response
             }
-            out.consume(ResponseMessage.Error(messageId, e.issue.toErrorResponse()))
+            out.send(ResponseMessage.Error(messageId, e.issue.toErrorResponse()))
         } catch (throwable: Throwable) {
             // The local endpoint has failed handling the request - reply with an error response
             val errorObject: ResponseError = exceptionHandler.apply(throwable)
-            out.consume(ResponseMessage.Error(messageId, errorObject))
+            out.send(ResponseMessage.Error(messageId, errorObject))
             if (throwable is Error) throw throwable else return
         } finally {
             receivedRequestMap.remove(messageId)
@@ -249,13 +266,11 @@ class RemoteEndpoint(
 
 
     override fun resolveMethod(requestId: MessageId?): String? {
-        synchronized(sentRequestMap) {
             val requestInfo =
                 sentRequestMap[requestId]
             if (requestInfo != null) {
                 return requestInfo.requestMessage.method
             }
-        }
         return null
     }
 

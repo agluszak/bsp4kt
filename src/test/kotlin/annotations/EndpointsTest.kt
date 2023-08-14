@@ -40,7 +40,6 @@ class EndpointsTest {
     }
 
     @Test
-    
     fun testProxy_01() {
         val endpoint: Endpoint = object : Endpoint {
             override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
@@ -60,7 +59,6 @@ class EndpointsTest {
     }
 
     @Test
-    
     fun testProxy_02() {
         val endpoint: Endpoint = object : Endpoint {
             override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
@@ -80,7 +78,6 @@ class EndpointsTest {
     }
 
     @Test
-    
     fun testBackAndForth() {
         val endpoint: Endpoint = object : Endpoint {
             override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {

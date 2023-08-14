@@ -1,6 +1,7 @@
 import com.jetbrains.jsonrpc4kt.Launcher
 import com.jetbrains.jsonrpc4kt.services.JsonNotification
 import com.jetbrains.jsonrpc4kt.services.JsonRequest
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
@@ -9,15 +10,9 @@ import java.io.IOException
 import java.io.InputStream
 import java.util.*
 import java.util.concurrent.CompletableFuture
-import java.util.concurrent.Future
-import java.util.concurrent.TimeUnit
 
 class LauncherTest() {
     internal class Param {
-        constructor()
-        constructor(message: String?) {
-            this.message = message
-        }
 
         var message: String? = null
     }
@@ -33,28 +28,23 @@ class LauncherTest() {
     }
 
     @Test
-    
-    fun testDone() {
+    fun testDone() = runTest {
         val a: A = object : A {
             override fun say(p: Param) {}
         }
-        val launcher = Launcher.createLauncher(
-            a,
-            A::class, ByteArrayInputStream("".toByteArray()), ByteArrayOutputStream()
-        )
-        val startListening: Future<*> = launcher.startListening()
-        startListening[TIMEOUT, TimeUnit.MILLISECONDS]
-        assertTrue(startListening.isDone)
+        val launcher = Launcher(ByteArrayInputStream("".toByteArray()), ByteArrayOutputStream(), a, A::class, this)
+        val startListening = launcher.start()
+        startListening.join()
+        assertTrue(startListening.isCompleted)
         assertFalse(startListening.isCancelled)
     }
 
     @Test
-    
-    fun testCanceled() {
+    fun testCanceled() = runTest {
         val a: A = object : A {
             override fun say(p: Param) {}
         }
-        val launcher = Launcher.createLauncher(a, A::class, object : InputStream() {
+        val input = object : InputStream() {
             @Throws(IOException::class)
             override fun read(): Int {
                 try {
@@ -64,10 +54,12 @@ class LauncherTest() {
                 }
                 return '\n'.code
             }
-        }, ByteArrayOutputStream())
-        val startListening: Future<*> = launcher.startListening()
-        startListening.cancel(true)
-        assertTrue(startListening.isDone)
+        }
+        val launcher = Launcher(input, ByteArrayOutputStream(), a, A::class, this)
+        val startListening = launcher.start()
+        startListening.cancel()
+        startListening.join()
+        assertTrue(startListening.isCompleted)
         assertTrue(startListening.isCancelled)
     }
 

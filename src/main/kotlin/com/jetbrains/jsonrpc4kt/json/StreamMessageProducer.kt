@@ -152,7 +152,8 @@ class StreamMessageProducer(
             }
             val content = String(buffer, charset(headers.charset))
             val message: Message = jsonHandler.deserializeMessage(content)
-            messageChannel.send(message)
+//            messageChannel.send(message)
+            messageChannel.trySend(message).getOrThrow()
         } catch (e: UnsupportedEncodingException) {
             // UnsupportedEncodingException can be thrown by String constructor
             logException(e)

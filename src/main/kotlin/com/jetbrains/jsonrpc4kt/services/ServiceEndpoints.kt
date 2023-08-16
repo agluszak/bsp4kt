@@ -43,9 +43,9 @@ object ServiceEndpoints {
      * Finds all Json RPC methods on a given type
      */
     private fun getSupportedMethods(type: KClass<*>, visitedTypes: MutableSet<KClass<*>>): Map<String, JsonRpcMethod> {
-        val result: MutableMap<String, JsonRpcMethod> = LinkedHashMap()
+        val result = LinkedHashMap<String, JsonRpcMethod>()
         AnnotationUtil.findRpcMethods(type, visitedTypes) { methodInfo ->
-            val meth: JsonRpcMethod = if (methodInfo.isNotification) {
+            val method = if (methodInfo.isNotification) {
                 JsonRpcMethod.notification(methodInfo.name, *methodInfo.parameterTypes.toTypedArray())
             } else {
                 check(methodInfo.method.isSuspend) { "JsonRPC requests must use suspend functions" }
@@ -56,7 +56,7 @@ object ServiceEndpoints {
                     *methodInfo.parameterTypes.toTypedArray()
                 )
             }
-            check(result.put(methodInfo.name, meth) == null) { "Duplicate RPC method " + methodInfo.name + "." }
+            check(result.put(methodInfo.name, method) == null) { "Duplicate RPC method " + methodInfo.name + "." }
         }
         return result
     }

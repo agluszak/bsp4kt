@@ -69,7 +69,6 @@ class Launcher<Local : Any, Remote : Any>(
 
     fun start(): Job {
         return coroutineScope.launch {
-
                 val producer = producer.start(this)
                 val endpoint = remoteEndpoint.start(this)
                 val consumer = consumer.start(this)

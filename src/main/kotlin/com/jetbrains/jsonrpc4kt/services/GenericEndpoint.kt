@@ -24,38 +24,53 @@ class GenericEndpoint<T>(delegate: T) : Endpoint {
         recursiveFindRpcMethods(delegate, HashSet())
     }
 
+    private fun getArguments(methodInfo: AnnotationUtil.MethodInfo, args: List<Any?>): Array<Any?> {
+        val argumentCount = args.size
+        val parameterCount = methodInfo.method.parameters.size - 1 // -1 for the receiver
+        val argsCorrectCount = if (argumentCount == parameterCount) {
+            args
+        } else if (argumentCount < parameterCount) {
+            // Take as many as there are and fill the rest with nulls
+            val missing = parameterCount - argumentCount
+            args + List(missing) { null }
+        } else {
+            // Take as many as there are parameters and log a warning for the rest
+            args.take(parameterCount).also {
+                val unexpectedArgs = args.drop(parameterCount)
+                LOG.warning("Unexpected additional params '$unexpectedArgs' for '${methodInfo.method}' are ignored")
+            }
+        }
+        return argsCorrectCount.toTypedArray()
+    }
+
+
     private fun recursiveFindRpcMethods(current: T, visited: MutableSet<KClass<*>>) {
         AnnotationUtil.findRpcMethods(current!!::class, visited) { methodInfo ->
-            val handler =
-                { args: List<Any?> ->
+            if (methodInfo.isNotification) {
+                val handler: (List<Any?>) -> Unit = { args: List<Any?> ->
+                    val arguments = getArguments(methodInfo, args)
+                    methodInfo.method.call(current, *arguments)
+                }
+                check(
+                    notificationHandlers.put(
+                        methodInfo.name,
+                        handler
+                    ) == null
+                ) { "Multiple methods for name " + methodInfo.name }
+            } else {
+                val handler = { args: List<Any?> ->
                     suspend {
-                        val method: KFunction<*> = methodInfo.method
-                        val argumentCount = args.size
-                        val parameterCount = method.parameters.size - 1 // -1 for the receiver
-                        val arguments = if (argumentCount == parameterCount) {
-                            args
-                        } else if (argumentCount < parameterCount) {
-                            // Take as many as there are and fill the rest with nulls
-                            val missing = parameterCount - argumentCount
-                            args + List(missing) { null }
-                        } else {
-                            // Take as many as there are parameters and log a warning for the rest
-                            args.take(parameterCount).also {
-                                val unexpectedArgs = args.drop(parameterCount)
-                                LOG.warning("Unexpected additional params '$unexpectedArgs' for '$method' are ignored")
-                            }
-                        }
-
-
-                        method.callSuspend(current, *arguments.toTypedArray())
+                        val arguments = getArguments(methodInfo, args)
+                        methodInfo.method.callSuspend(current, *arguments)
                     }
                 }
-            check(
-                requestHandlers.put(
-                    methodInfo.name,
-                    handler
-                ) == null
-            ) { "Multiple methods for name " + methodInfo.name }
+                check(
+                    requestHandlers.put(
+                        methodInfo.name,
+                        handler
+                    ) == null
+                ) { "Multiple methods for name " + methodInfo.name }
+            }
         }
     }
 

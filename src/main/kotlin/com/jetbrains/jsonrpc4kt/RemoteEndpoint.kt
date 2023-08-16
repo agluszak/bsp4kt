@@ -40,7 +40,7 @@ class RemoteEndpoint(
     Endpoint, MethodProvider {
     private val nextRequestId = AtomicInteger()
     private val sentRequestMap: MutableMap<MessageId, PendingRequestInfo> = ConcurrentHashMap()
-    private val receivedRequestMap: MutableMap<MessageId, CompletableDeferred<*>> = ConcurrentHashMap()
+    private val receivedRequestMap: MutableMap<MessageId, Deferred<*>> = ConcurrentHashMap()
 
     /**
      * Information about requests that have been sent and for which no response has been received yet.
@@ -50,7 +50,7 @@ class RemoteEndpoint(
         val future: CompletableDeferred<Any?>
     )
 
-    fun start(coroutineScope: CoroutineScope) = coroutineScope.launch {
+    fun start(coroutineScope: CoroutineScope): Job = coroutineScope.launch {
         for (message in `in`) {
             when (message) {
                 is NotificationMessage -> {
@@ -158,7 +158,6 @@ class RemoteEndpoint(
                     requestInfo.future.complete(deserialized)
                 } catch (exception: MessageIssueException) {
                     requestInfo.future.completeExceptionally(exception)
-                    return
                 }
 
             }
@@ -228,15 +227,14 @@ class RemoteEndpoint(
         message.method.startsWith("$/")
 
     private suspend fun handleRequest(requestMessage: RequestMessage) {
-        val deferred = CompletableDeferred<Any?>() // TODO: make sure it doesn't need to have a parent job
         val messageId = requestMessage.id
-        receivedRequestMap[messageId] = deferred
+
         try {
             val params = jsonHandler.deserializeParams(requestMessage)
             // Forward the request to the local endpoint
-            val result = localEndpoint.request(requestMessage.method, params)
-            deferred.complete(result)
-            val serializedResult = jsonHandler.serializeResult(requestMessage.method, result)
+            val resultDeferred = coroutineScope.async(SupervisorJob()) { localEndpoint.request(requestMessage.method, params) } // TODO: check
+            receivedRequestMap[messageId] = resultDeferred
+            val serializedResult = jsonHandler.serializeResult(requestMessage.method, resultDeferred.await())
             out.send(ResponseMessage.Result(messageId, serializedResult))
         } catch (e: CancellationException) {
             val message =
@@ -260,7 +258,7 @@ class RemoteEndpoint(
             out.send(ResponseMessage.Error(messageId, errorObject))
             if (throwable is Error) throw throwable else return
         } finally {
-            receivedRequestMap.remove(messageId)
+            receivedRequestMap.remove(messageId) // TODO: check
         }
     }
 

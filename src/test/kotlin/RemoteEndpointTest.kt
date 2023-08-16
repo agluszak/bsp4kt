@@ -18,6 +18,7 @@ import java.util.logging.Level
 import kotlin.reflect.typeOf
 import kotlin.test.assertFailsWith
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RemoteEndpointTest {
 
     val jsonHandler = MessageJsonHandler(
@@ -47,17 +48,9 @@ class RemoteEndpointTest {
         }
     }
 
-    internal class TestMessageConsumer : MessageConsumer {
-        var messages: MutableList<Message> = ArrayList<Message>()
-        override fun consume(message: Message) {
-            messages.add(message)
-        }
-    }
-
     @Test
     fun testNotification() = runTest {
         val endp = TestEndpoint(jsonHandler)
-        val consumer = TestMessageConsumer()
         val inputChannel = Channel<Message>()
         val outputChannel = Channel<Message>()
         val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
@@ -65,16 +58,18 @@ class RemoteEndpointTest {
         endpoint.start(this)
 
         inputChannel.send(NotificationMessage("notification", JsonParams.array(JsonPrimitive("myparam"))))
+
         val notificationMessage: NotificationMessage = endp.notifications[0]
         assertEquals("notification", notificationMessage.method)
         assertEquals(JsonParams.array(JsonPrimitive("myparam")), notificationMessage.params)
-        assertTrue(consumer.messages.isEmpty())
+        assertTrue(outputChannel.isEmpty)
+
+        inputChannel.close()
     }
 
     @Test
     fun testRequest1() = runTest {
         val endp = TestEndpoint(jsonHandler)
-        val consumer = TestMessageConsumer()
         val inputChannel = Channel<Message>()
         val outputChannel = Channel<Message>()
         val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
@@ -82,19 +77,22 @@ class RemoteEndpointTest {
         endpoint.start(this)
 
         inputChannel.send(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        delay(1000) // todo change this test
         val (key, value) = endp.requests.entries.iterator().next()
         value.complete("success")
         assertEquals("request", key.method)
         assertEquals(JsonParams.array(JsonPrimitive("myparam")), key.params)
-        val responseMessage = consumer.messages[0] as ResponseMessage.Result
+
+        val responseMessage = outputChannel.receive() as ResponseMessage.Result
         assertEquals(JsonPrimitive("success"), responseMessage.result)
         assertEquals(MessageId.StringId("1"), responseMessage.id)
+
+        inputChannel.close()
     }
 
     @Test
     fun testRequest2() = runTest {
         val endp = TestEndpoint(jsonHandler)
-        val consumer = TestMessageConsumer()
         val inputChannel = Channel<Message>()
         val outputChannel = Channel<Message>()
         val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
@@ -102,13 +100,16 @@ class RemoteEndpointTest {
         endpoint.start(this)
 
         inputChannel.send(RequestMessage(MessageId.NumberId(1), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        delay(1000) // todo change this test
         val (key, value) = endp.requests.entries.iterator().next()
         value.complete("success")
         assertEquals("request", key.method)
         assertEquals(JsonParams.array(JsonPrimitive("myparam")), key.params)
-        val responseMessage = consumer.messages[0] as ResponseMessage.Result
+        val responseMessage = outputChannel.receive() as ResponseMessage.Result
         assertEquals(JsonPrimitive("success"), responseMessage.result)
         assertEquals(MessageId.NumberId(1), responseMessage.id)
+
+        inputChannel.close()
     }
 
     @Test
@@ -123,10 +124,13 @@ class RemoteEndpointTest {
         launch {
             delay(1000)
             inputChannel.send(ResponseMessage.Result(MessageId.NumberId(1), JsonPrimitive("success")))
+            inputChannel.close()
         }
 
         val result = endpoint.request("request", listOf("myparam"))
         assertEquals("success", result)
+
+
     }
 
     @Test
@@ -138,12 +142,16 @@ class RemoteEndpointTest {
 
         endpoint.start(this)
         inputChannel.send(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        delay(1000) // todo change this test
+
         val (_, value) = endp.requests.entries.iterator().next()
         value.cancel()
         val message = outputChannel.receive() as ResponseMessage.Error
         val error = message.error
         assertEquals(error.code, ResponseErrorCode.RequestCancelled.code)
         assertEquals(error.message, "The request (id: \"1\", method: 'request') has been cancelled")
+
+        inputChannel.close()
     }
 
     // TODO: test unknown method handling
@@ -156,7 +164,6 @@ class RemoteEndpointTest {
                     throw RuntimeException("BAAZ")
                 }
             }
-            val consumer = TestMessageConsumer()
             val inputChannel = Channel<Message>()
             val outputChannel = Channel<Message>()
             val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
@@ -175,6 +182,8 @@ class RemoteEndpointTest {
             assertEquals(ResponseErrorCode.InternalError.code, error.code)
             val exception = error.data
             assertTrue(exception.toString().contains("java.lang.RuntimeException: BAAZ"))
+
+            inputChannel.close()
         }
     }
 

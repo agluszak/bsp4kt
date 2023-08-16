@@ -28,12 +28,12 @@ object AnnotationUtil {
         }
     }
 
-    internal fun getSegment(clazz: KClass<*>): String {
+    private fun getSegment(clazz: KClass<*>): String {
         val jsonSegment: JsonSegment? = clazz.findAnnotation()
         return if (jsonSegment == null) "" else jsonSegment.value + "/"
     }
 
-    internal fun createMethodInfo(method: KFunction<*>, segment: String): MethodInfo? {
+    private fun createMethodInfo(method: KFunction<*>, segment: String): MethodInfo? {
         val jsonRequest: JsonRequest? = method.findAnnotation()
         if (jsonRequest != null) {
             return createRequestInfo(method, segment, jsonRequest)
@@ -45,7 +45,7 @@ object AnnotationUtil {
         return null
     }
 
-    internal fun createNotificationInfo(
+    private fun createNotificationInfo(
         method: KFunction<*>,
         segment: String,
         jsonNotification: JsonNotification
@@ -54,11 +54,12 @@ object AnnotationUtil {
         return methodInfo.copy(isNotification = true)
     }
 
-    internal fun createRequestInfo(method: KFunction<*>, segment: String, jsonRequest: JsonRequest): MethodInfo {
+    private fun createRequestInfo(method: KFunction<*>, segment: String, jsonRequest: JsonRequest): MethodInfo {
+        check(method.isSuspend)
         return createMethodInfo(method, jsonRequest.useSegment, segment, jsonRequest.value)
     }
 
-    internal fun createMethodInfo(
+    private fun createMethodInfo(
         method: KFunction<*>,
         useSegment: Boolean,
         segment: String,
@@ -70,7 +71,7 @@ object AnnotationUtil {
         return MethodInfo(name, method, parameterTypes)
     }
 
-    internal fun getMethodName(method: KFunction<*>, useSegment: Boolean, segment: String, value: String?): String {
+    private fun getMethodName(method: KFunction<*>, useSegment: Boolean, segment: String, value: String?): String {
         val name = if (!value.isNullOrEmpty()) value else method.name
         return if (useSegment) segment + name else name
     }

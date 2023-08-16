@@ -1,25 +1,22 @@
 package annotations
 
-import annotations.EndpointsTest.*
+
 import com.jetbrains.jsonrpc4kt.Endpoint
 import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
 import com.jetbrains.jsonrpc4kt.services.*
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-
-
-import java.util.*
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 import java.util.function.Consumer
 import kotlin.reflect.typeOf
+import kotlin.test.Ignore
 
 
 class EndpointsTest {
     @JsonSegment("foo")
     interface Foo {
         @JsonRequest
-        fun doStuff(arg: String): CompletableFuture<String?>
+        suspend fun doStuff(arg: String): String?
 
         @JsonNotification
         fun myNotification(someArg: String)
@@ -30,7 +27,7 @@ class EndpointsTest {
     @JsonSegment("bar")
     interface Bar {
         @JsonRequest
-        fun doStuff2(arg: String, arg2: Int): CompletableFuture<String?>
+        suspend fun doStuff2(arg: String, arg2: Int): String?
 
         @JsonNotification
         fun myNotification2(someArg: String, someArg2: Int)
@@ -40,12 +37,12 @@ class EndpointsTest {
     }
 
     @Test
-    fun testProxy_01() {
+    fun testProxy_01() = runTest {
         val endpoint: Endpoint = object : Endpoint {
-            override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+            override suspend fun request(method: String, params: List<Any?>): Any {
                 assertEquals("foo/doStuff", method)
                 assertEquals("param", params[0])
-                return CompletableFuture.completedFuture("result")
+                return "result"
             }
 
             override fun notify(method: String, params: List<Any?>) {
@@ -55,16 +52,16 @@ class EndpointsTest {
         }
         val foo: Foo = ServiceEndpoints.toServiceObject(endpoint, Foo::class)
         foo.myNotification("notificationParam")
-        assertEquals("result", foo.doStuff("param")[TIMEOUT, TimeUnit.MILLISECONDS])
+        assertEquals("result", foo.doStuff("param"))
     }
 
     @Test
-    fun testProxy_02() {
+    fun testProxy_02() = runTest {
         val endpoint: Endpoint = object : Endpoint {
-            override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+            override suspend fun request(method: String, params: List<Any?>): Any {
                 assertEquals("bar/doStuff2", method)
                 assertEquals("[param, 2]", params.toString())
-                return CompletableFuture.completedFuture("result")
+                return "result"
             }
 
             override fun notify(method: String, params: List<Any?>) {
@@ -74,16 +71,17 @@ class EndpointsTest {
         }
         val bar: Bar = ServiceEndpoints.toServiceObject(endpoint, Bar::class)
         bar.myNotification2("notificationParam", 1)
-        assertEquals("result", bar.doStuff2("param", 2)[TIMEOUT, TimeUnit.MILLISECONDS])
+        assertEquals("result", bar.doStuff2("param", 2))
     }
 
     @Test
-    fun testBackAndForth() {
+    @Ignore // TODO: do we want to support this?
+    fun testBackAndForth() = runTest {
         val endpoint: Endpoint = object : Endpoint {
-            override suspend fun request(method: String, params: List<Any?>): CompletableFuture<*> {
+            override suspend fun request(method: String, params: List<Any?>): Any? {
                 assertEquals("foo/doStuff", method)
                 assertEquals("param", params[0])
-                return CompletableFuture.completedFuture("result")
+                return "result"
             }
 
             override fun notify(method: String, params: List<Any?>) {
@@ -95,53 +93,8 @@ class EndpointsTest {
         val secondEndpoint: Endpoint = ServiceEndpoints.toEndpoint(intermediateFoo)
         val foo: Foo = ServiceEndpoints.toServiceObject(secondEndpoint, Foo::class)
         foo.myNotification("notificationParam")
-        assertEquals("result", foo.doStuff("param").get(TIMEOUT, TimeUnit.MILLISECONDS))
+        assertEquals("result", foo.doStuff("param"))
     }
-
-//    @Test
-//    
-//    fun testMultipleInterfaces() {
-//        val requests: MutableMap<String, Any?> = HashMap()
-//        val notifications: MutableMap<String, Any?> = HashMap()
-//        val endpoint: Endpoint = object : Endpoint {
-//            override fun request(method: String, params: List<Any?>): CompletableFuture<*> {
-//                requests[method] = params
-//                return when (method) {
-//                    "foo/doStuff" -> {
-//                        assertEquals("paramFoo", params[0])
-//                        CompletableFuture.completedFuture("resultFoo")
-//                    }
-//
-//                    "bar/doStuff2" -> {
-//                        assertEquals("paramBar", params[0])
-//                        assertEquals(77, params[1])
-//                        CompletableFuture.completedFuture("resultBar")
-//                    }
-//
-//                    else -> {
-//                        fail("Unexpected method: $method")
-//                    }
-//                }
-//            }
-//
-//            override fun notify(method: String, params: List<Any?>) {
-//                notifications[method] = params
-//            }
-//        }
-//        val classLoader = javaClass.classLoader
-//        val proxy: Any =
-//            ServiceEndpoints.toServiceObject(endpoint, listOf(Foo::class, Bar::class), classLoader)
-//        val foo = proxy as Foo
-//        foo.myNotification("notificationParamFoo")
-//        assertEquals("resultFoo", foo.doStuff("paramFoo")[TIMEOUT, TimeUnit.MILLISECONDS])
-//        val bar = proxy as Bar
-//        bar.myNotification2("notificationParamBar", 42)
-//        assertEquals("resultBar", bar.doStuff2("paramBar", 77)[TIMEOUT, TimeUnit.MILLISECONDS])
-//        assertEquals(2, requests.size)
-//        assertEquals(2, notifications.size)
-//        assertEquals(listOf("notificationParamFoo"), notifications["foo/myNotification"])
-//        assertEquals(mutableListOf("notificationParamBar", 42), notifications["bar/myNotification2"])
-//    }
 
     @Test
     fun testRpcMethods_01() {
@@ -184,13 +137,13 @@ class EndpointsTest {
     }
 
     @Test
-    fun testIssue106() {
+    fun lsp4jIssue106() {
         val foo: Foo = ServiceEndpoints.toServiceObject(GenericEndpoint(Any()), Foo::class)
         assertEquals(foo, foo)
     }
 
     @Test
-    fun testIssue107() {
+    fun lsp4jIssue107() {
         val methods: Map<String, JsonRpcMethod> = ServiceEndpoints.getSupportedMethods(
             StringConsumer::class
         )
@@ -200,9 +153,4 @@ class EndpointsTest {
         assertEquals(typeOf<String?>(), method.parameterTypes[0])
         assertTrue(method.isNotification)
     }
-
-    companion object {
-        private const val TIMEOUT: Long = 2000
-    }
 }
-

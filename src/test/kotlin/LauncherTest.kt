@@ -1,17 +1,18 @@
 import com.jetbrains.jsonrpc4kt.Launcher
 import com.jetbrains.jsonrpc4kt.services.JsonNotification
 import com.jetbrains.jsonrpc4kt.services.JsonRequest
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.IOException
-import java.io.InputStream
+import java.io.*
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import kotlin.test.assertFailsWith
 
-class LauncherTest() {
+class LauncherTest {
+    val newlines = "\r\n"
+
     internal class Param {
 
         var message: String? = null
@@ -28,12 +29,46 @@ class LauncherTest() {
     }
 
     @Test
-    fun testDone() = runTest {
+    fun testEmpty() = runTest {
         val a: A = object : A {
             override fun say(p: Param) {}
         }
         val launcher = Launcher(ByteArrayInputStream("".toByteArray()), ByteArrayOutputStream(), a, A::class, this)
         val startListening = launcher.start()
+        startListening.join()
+        assertTrue(startListening.isCompleted)
+        assertFalse(startListening.isCancelled)
+    }
+
+    @Test
+    fun cancellationClosesInputStream() = runTest {
+        val a: A = object : A {
+            override fun say(p: Param) {}
+        }
+        val input = PipedInputStream()
+        val outputStream = PipedOutputStream(input)
+        val writer = OutputStreamWriter(outputStream)
+        val launcher = Launcher(input, outputStream, a, A::class, this)
+        val startListening = launcher.start()
+        startListening.cancelAndJoin()
+        assertTrue(startListening.isCompleted)
+        assertTrue(startListening.isCancelled)
+        assertFailsWith<IOException> { input.read() }
+    }
+
+    @Test
+    fun testCompleted() = runTest {
+        val a: A = object : A {
+            override fun say(p: Param) {}
+        }
+
+        val inputStream =
+            ByteArrayInputStream("""Content-Length: 49$newlines{"jsonrpc": "2.0", "method": "foobar", "id": "1"}""".toByteArray())
+        val outputStream = ByteArrayOutputStream()
+
+        val launcher = Launcher(inputStream, outputStream, a, A::class, this)
+        val startListening = launcher.start()
+
         startListening.join()
         assertTrue(startListening.isCompleted)
         assertFalse(startListening.isCancelled)

@@ -24,7 +24,7 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
         object_equals = Any::class.java.getDeclaredMethod("equals", Any::class.java)
         object_hashCode = Any::class.java.getDeclaredMethod("hashCode")
         object_toString = Any::class.java.getDeclaredMethod("toString")
-    
+
         methodInfos = LinkedHashMap<String, AnnotationUtil.MethodInfo>()
         AnnotationUtil.findRpcMethods(remoteInterface, HashSet()) { methodInfo ->
             check(
@@ -35,13 +35,13 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
         }
     }
 
-    internal inline fun handleInvocationTargetException(action: () -> Any?): Any? = try {
+    private inline fun handleInvocationTargetException(action: () -> Any?): Any? = try {
         action()
     } catch (e: InvocationTargetException) {
         throw e.cause!!
     }
 
-    internal fun invokeSuspendFunction(
+    private fun invokeSuspendFunction(
         continuation: Continuation<*>,
         suspendFunction: suspend () -> Any?,
     ): Any? = handleInvocationTargetException {

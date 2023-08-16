@@ -16,5 +16,6 @@ internal fun invokeSuspendFunction(
 ): Any? = handleInvocationTargetException {
     @Suppress("UNCHECKED_CAST") (suspendFunction as (Continuation<*>) -> Any?)(continuation)
 }
+
 class ReflectionHelper {
 }

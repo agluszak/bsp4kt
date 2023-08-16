@@ -20,6 +20,7 @@ import kotlin.reflect.jvm.jvmName
 /**
  * A message producer that reads from an input stream and parses messages from JSON.
  */
+
 class StreamMessageProducer(
     private val input: InputStream,
     private val jsonHandler: MessageJsonHandler,
@@ -40,7 +41,7 @@ class StreamMessageProducer(
             var debugBuilder: StringBuilder? = null
             var newLine = false
             var headers = Headers()
-            while (keepRunning) {
+            while (isActive && keepRunning) {
                 val c = withContext(Dispatchers.IO) {
                     input.read()
                 }
@@ -152,8 +153,8 @@ class StreamMessageProducer(
             }
             val content = String(buffer, charset(headers.charset))
             val message: Message = jsonHandler.deserializeMessage(content)
-//            messageChannel.send(message)
-            messageChannel.trySend(message).getOrThrow()
+            messageChannel.send(message)
+//            messageChannel.trySend(message).getOrThrow()
         } catch (e: UnsupportedEncodingException) {
             // UnsupportedEncodingException can be thrown by String constructor
             logException(e)

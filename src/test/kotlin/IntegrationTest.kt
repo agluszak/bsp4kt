@@ -9,17 +9,19 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
-import java.util.concurrent.*
 import java.util.concurrent.CancellationException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.jvm.jvmName
+import kotlin.test.assertFailsWith
 
 class IntegrationTest {
     @Serializable
@@ -70,26 +72,16 @@ class IntegrationTest {
         val serverSideLauncher: Launcher<MyServer, MyClient> =
             Launcher(in2, out2, server, MyClient::class, coroutineScope = this)
 
-        val clientJob = clientSideLauncher.start()
-        val serverJob = serverSideLauncher.start()
-//
+        clientSideLauncher.start()
+        serverSideLauncher.start()
         val fooFuture = async { clientSideLauncher.remoteProxy.askServer(MyParam("FOO")) }
-//        val barFuture = async { serverSideLauncher.remoteProxy.askClient(MyParam("BAR")) }
-
-//        val fooFuture = async { client.askClient(MyParam("FOO")) }
-
-        `in`.close()
-        out.close()
-        `in2`.close()
-        out2.close()
-        clientJob.cancel()
-        serverJob.cancel()
-//        val barFuture = async { server.askServer(MyParam("BAR")) }
-
+        val barFuture = async { serverSideLauncher.remoteProxy.askClient(MyParam("BAR")) }
 
         assertEquals("FOO", fooFuture.await().value)
-        throw CancellationException()
-//        assertEquals("BAR", barFuture.await().value)
+        assertEquals("BAR", barFuture.await().value)
+
+        out.close()
+        out2.close()
 
     }
 
@@ -200,16 +192,19 @@ class IntegrationTest {
         val serverSideLauncher: Launcher<MyServer, MyClient> =
             Launcher(in2, out2, server, MyClient::class, this)
 
-        val clientJob = clientSideLauncher.start()
-        val serverJob = serverSideLauncher.start()
+        clientSideLauncher.start()
+        serverSideLauncher.start()
 
         // We call a method that is declared as returning Unit, but the other end returns a non-null value
         // make sure that the json parsing discards that result
-        val unit = clientSideLauncher.remoteProxy.askServer(MyParam("FOO"))
-        assertEquals(Unit, unit)
+        val unit = async {
+            clientSideLauncher.remoteProxy.askServer(MyParam("FOO"))
+        }
 
-        clientJob.cancel()
-        serverJob.cancel()
+        assertEquals(Unit, unit.await())
+
+        out.close()
+        out2.close()
     }
 
     @Test
@@ -221,22 +216,23 @@ class IntegrationTest {
         val out2 = PipedOutputStream()
         `in`.connect(out2)
         out.connect(in2)
-        val inComputeAsync = BooleanArray(1)
-        val cancellationHappened = BooleanArray(1)
+        val inComputeAsync = AtomicBoolean(false)
+        val cancellationHappened = AtomicBoolean(false)
         val client: MyClient = object : MyClient {
             override suspend fun askClient(param: MyParam): MyParam {
                 try {
-                    val startTime: Long = System.currentTimeMillis()
-                    inComputeAsync[0] = true
-                    do {
-                        yield()
-                        Thread.sleep(50)
-                    } while (System.currentTimeMillis() - startTime < TIMEOUT)
-                } catch (e: CancellationException) {
-                    cancellationHappened[0] = true
-                } catch (e: InterruptedException) {
-                    fail("Thread was interrupted unexpectedly.")
+                    inComputeAsync.set(true)
+                    while (true) {
+                        delay(50)
+                    }
+                } catch (e: Exception) {
+                    println("Exception: $e")
                 }
+//                } catch (e: CancellationException) {
+//                    cancellationHappened.set(true)
+//                } catch (e: InterruptedException) {
+//                    fail("Thread was interrupted unexpectedly.")
+//                }
                 return param
             }
         }
@@ -246,25 +242,21 @@ class IntegrationTest {
         val server: MyServer = MyServerImpl()
         val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
 
-        launch {
-            clientSideLauncher.start().join()
-        }
-
-        launch {
-            serverSideLauncher.start().join()
-        }
-
+        clientSideLauncher.start()
+        serverSideLauncher.start()
 
         val future = async { serverSideLauncher.remoteProxy.askClient(MyParam("FOO")) }
         var startTime = System.currentTimeMillis()
-        while (!inComputeAsync[0]) {
-            Thread.sleep(50)
+        while (!inComputeAsync.get()) {
+            delay(50)
             if (System.currentTimeMillis() - startTime > TIMEOUT) fail("Timeout waiting for client to start computing.") as Any
         }
+        println("Cancelling")
         future.cancel()
+        println("should have cancelled")
         startTime = System.currentTimeMillis()
-        while (!cancellationHappened[0]) {
-            Thread.sleep(50)
+        while (!cancellationHappened.get()) {
+            delay(50)
             if (System.currentTimeMillis() - startTime > TIMEOUT) fail("Timeout waiting for confirmation of cancellation.") as Any
         }
         try {
@@ -292,7 +284,7 @@ class IntegrationTest {
                     val startTime: Long = System.currentTimeMillis()
                     do {
                         yield()
-                        Thread.sleep(50)
+                        delay(50)
                     } while (System.currentTimeMillis() - startTime < TIMEOUT)
                 } catch (e: InterruptedException) {
                     fail("Thread was interrupted unexpectedly.")
@@ -304,7 +296,7 @@ class IntegrationTest {
             Launcher(`in`, out, server, MyClient::class, this)
 
 
-            serverSideLauncher.start().join()
+        serverSideLauncher.start().join()
 
         val header = "Content-Length: 120$CRLF$CRLF"
         val actualJson = Json.parseToJsonElement(out.toString().removePrefix(header))
@@ -349,30 +341,31 @@ class IntegrationTest {
         val server: MyServer = MyServerImpl()
         val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
 
-        launch {
-            clientSideLauncher.start().join()
-        }
-        launch {
-            serverSideLauncher.start().join()
-        }
+        clientSideLauncher.start()
+        serverSideLauncher.start()
 
+        println("huh")
 
-        val errorFuture1 = async { serverSideLauncher.remoteProxy.askClient(MyParam("FOO"))}
-        try {
-            println(errorFuture1.await())
-            fail() as Any
-        } catch (e: ExecutionException) {
-            assertNotNull((e.cause as ResponseErrorException?)!!.responseError.message)
-        }
-        val errorFuture2 = async { serverSideLauncher.remoteProxy.askClient(MyParam("FOO"))}
-        try {
-            errorFuture2.await()
-            fail()
-        } catch (e: ExecutionException) {
-            assertNotNull((e.cause as ResponseErrorException?)!!.responseError.message)
-        }
+        val error1 =
+            assertFailsWith<ResponseErrorException> { serverSideLauncher.remoteProxy.askClient(MyParam("FOO")) }
+        assertEquals(-32603, error1.responseError.code)
+        assertEquals("Internal error.", error1.responseError.message)
+
+        println("huh2")
+
+        val error2 =
+            assertFailsWith<ResponseErrorException> { serverSideLauncher.remoteProxy.askClient(MyParam("FOO")) }
+//        val error2Cause = error2.cause as ResponseErrorException
+        assertEquals(-32603, error2.responseError.code)
+        assertEquals("Internal error.", error2.responseError.message)
+
+        println("huh3")
+
         val goodFuture = serverSideLauncher.remoteProxy.askClient(MyParam("FOO"))
         assertEquals("FOO", goodFuture.value)
+
+        out.close()
+        out2.close()
     }
 
     @Test
@@ -390,7 +383,7 @@ class IntegrationTest {
             val server: MyServer = MyServerImpl()
             val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
 
-                serverSideLauncher.start().join()
+            serverSideLauncher.start().join()
 
             logMessages.await(
                 Level.WARNING,
@@ -426,7 +419,7 @@ class IntegrationTest {
             val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
 
 
-                serverSideLauncher.start().join()
+            serverSideLauncher.start().join()
             logMessages.await(
                 Level.INFO,
                 "Ignoring optional notification: NotificationMessage(method=\$/foo1, params=null)"
@@ -466,7 +459,7 @@ class IntegrationTest {
             }
             val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
 
-                serverSideLauncher.start().join()
+            serverSideLauncher.start().join()
 
             logMessages.await(
                 Level.WARNING,

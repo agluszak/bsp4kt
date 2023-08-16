@@ -1,11 +1,15 @@
 package com.jetbrains.jsonrpc4kt
 
 import com.jetbrains.jsonrpc4kt.RemoteEndpoint.Companion.DEFAULT_EXCEPTION_HANDLER
-import com.jetbrains.jsonrpc4kt.json.*
+import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
+import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
+import com.jetbrains.jsonrpc4kt.json.StreamMessageConsumer
+import com.jetbrains.jsonrpc4kt.json.StreamMessageProducer
 import com.jetbrains.jsonrpc4kt.messages.Message
 import com.jetbrains.jsonrpc4kt.messages.ResponseError
 import com.jetbrains.jsonrpc4kt.services.ServiceEndpoints
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
@@ -13,9 +17,7 @@ import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.function.Function
-import java.util.logging.Level
 import java.util.logging.Logger
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.jvm.jvmName
 
@@ -64,22 +66,32 @@ class Launcher<Local : Any, Remote : Any>(
     val consumer = StreamMessageConsumer(output, jsonHandler, consumerChannel)
 
     val localEndpoint = ServiceEndpoints.toEndpoint(localService)
-    val remoteEndpoint = RemoteEndpoint(producerChannel, consumerChannel, localEndpoint, jsonHandler, coroutineScope, exceptionHandler)
+    val remoteEndpoint =
+        RemoteEndpoint(producerChannel, consumerChannel, localEndpoint, jsonHandler, coroutineScope, exceptionHandler)
     val remoteProxy = ServiceEndpoints.toServiceObject(remoteEndpoint, remoteInterface)
 
+    @OptIn(InternalCoroutinesApi::class)
     fun start(): Job {
-        return coroutineScope.launch {
-                val producer = producer.start(this)
-                val endpoint = remoteEndpoint.start(this)
-                val consumer = consumer.start(this)
+        val job = coroutineScope.launch {
+            val producer = producer.start(this)
+            val endpoint = remoteEndpoint.start(this)
+            val consumer = consumer.start(this)
 
-                producer.join()
-                endpoint.join()
-                consumer.join()
-            }
+            producer.join()
+            endpoint.join()
+            consumer.join()
         }
 
-companion object {
+        // TODO: Refactor to not use internal API
+        job.invokeOnCompletion(true, true) {
+            input.close()
+            output.close()
+        }
+
+        return job
+    }
+
+    companion object {
         private val LOG = Logger.getLogger(Launcher::class.jvmName)
     }
 

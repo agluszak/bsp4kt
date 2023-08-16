@@ -4,11 +4,9 @@ import com.jetbrains.jsonrpc4kt.Endpoint
 import com.jetbrains.jsonrpc4kt.ResponseErrorException
 import com.jetbrains.jsonrpc4kt.messages.ResponseError
 import com.jetbrains.jsonrpc4kt.messages.ResponseErrorCode
-import java.util.concurrent.CompletableFuture
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.KClass
-import kotlin.reflect.KFunction
 import kotlin.reflect.full.callSuspend
 import kotlin.reflect.jvm.jvmName
 

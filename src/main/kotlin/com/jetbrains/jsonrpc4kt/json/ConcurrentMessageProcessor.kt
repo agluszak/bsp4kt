@@ -5,8 +5,6 @@ import com.jetbrains.jsonrpc4kt.MessageProducer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import java.io.Closeable
-import java.io.IOException
 import java.util.concurrent.*
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -16,7 +14,10 @@ import kotlin.reflect.jvm.jvmName
 /**
  * This class connects a message producer with a message consumer by listening for new messages in a dedicated thread.
  */
-class ConcurrentMessageProcessor(private val messageProducer: MessageProducer, private val messageConsumer: MessageConsumer) {
+class ConcurrentMessageProcessor(
+    private val messageProducer: MessageProducer,
+    private val messageConsumer: MessageConsumer
+) {
     private var isRunning = false
 
     /**
@@ -36,6 +37,7 @@ class ConcurrentMessageProcessor(private val messageProducer: MessageProducer, p
             }
         }
     }
+
     companion object {
         private val LOG = Logger.getLogger(ConcurrentMessageProcessor::class.jvmName)
     }

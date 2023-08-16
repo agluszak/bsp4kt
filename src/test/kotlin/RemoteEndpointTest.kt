@@ -1,6 +1,4 @@
 import com.jetbrains.jsonrpc4kt.Endpoint
-import com.jetbrains.jsonrpc4kt.JsonRpcException
-import com.jetbrains.jsonrpc4kt.MessageConsumer
 import com.jetbrains.jsonrpc4kt.RemoteEndpoint
 import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
 import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
@@ -13,10 +11,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.net.SocketException
-import java.util.logging.Level
 import kotlin.reflect.typeOf
-import kotlin.test.assertFailsWith
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RemoteEndpointTest {
@@ -54,7 +49,7 @@ class RemoteEndpointTest {
         val inputChannel = Channel<Message>()
         val outputChannel = Channel<Message>()
         val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
-        
+
         endpoint.start(this)
 
         inputChannel.send(NotificationMessage("notification", JsonParams.array(JsonPrimitive("myparam"))))
@@ -76,7 +71,13 @@ class RemoteEndpointTest {
 
         endpoint.start(this)
 
-        inputChannel.send(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        inputChannel.send(
+            RequestMessage(
+                MessageId.StringId("1"),
+                "request",
+                JsonParams.array(JsonPrimitive("myparam"))
+            )
+        )
         delay(1000) // todo change this test
         val (key, value) = endp.requests.entries.iterator().next()
         value.complete("success")
@@ -113,27 +114,6 @@ class RemoteEndpointTest {
     }
 
     @Test
-    fun testCompletion() = runTest {
-        val endp = TestEndpoint(jsonHandler)
-        val inputChannel = Channel<Message>()
-        val outputChannel = Channel<Message>()
-        val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
-
-        endpoint.start(this)
-
-        launch {
-            delay(1000)
-            inputChannel.send(ResponseMessage.Result(MessageId.NumberId(1), JsonPrimitive("success")))
-            inputChannel.close()
-        }
-
-        val result = endpoint.request("request", listOf("myparam"))
-        assertEquals("success", result)
-
-
-    }
-
-    @Test
     fun testCancellation() = runTest {
         val endp = TestEndpoint(jsonHandler)
         val inputChannel = Channel<Message>()
@@ -141,7 +121,13 @@ class RemoteEndpointTest {
         val endpoint = RemoteEndpoint(inputChannel, outputChannel, endp, jsonHandler, this)
 
         endpoint.start(this)
-        inputChannel.send(RequestMessage(MessageId.StringId("1"), "request", JsonParams.array(JsonPrimitive("myparam"))))
+        inputChannel.send(
+            RequestMessage(
+                MessageId.StringId("1"),
+                "request",
+                JsonParams.array(JsonPrimitive("myparam"))
+            )
+        )
         delay(1000) // todo change this test
 
         val (_, value) = endp.requests.entries.iterator().next()

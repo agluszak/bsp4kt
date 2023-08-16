@@ -8,7 +8,6 @@ import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.util.concurrent.CompletableFuture
 import java.util.function.Predicate
 import java.util.logging.Level
 
@@ -152,8 +151,8 @@ class GenericEndpointTest {
         LogMessageAccumulator(GenericEndpoint::class).use { logMessages ->
             val endpoint = GenericEndpoint(object : Any() {
                 @JsonRequest
-                fun getStringValue(stringValue: String?): CompletableFuture<String> {
-                    return CompletableFuture.completedFuture(stringValue)
+                suspend fun getStringValue(stringValue: String): String {
+                    return stringValue
                 }
             })
             assertEquals(expectedString, endpoint.request("getStringValue", params))
@@ -193,13 +192,13 @@ class GenericEndpointTest {
                 var intValue: Int? = null
 
                 @JsonRequest
-                fun getStringValue(): CompletableFuture<String?> {
-                    return CompletableFuture.completedFuture(stringValue)
+                suspend fun getStringValue(): String? {
+                    return stringValue
                 }
 
                 @JsonRequest
-                fun getIntValue(): CompletableFuture<Int?> {
-                    return CompletableFuture.completedFuture(intValue)
+                suspend fun getIntValue(): Int? {
+                    return intValue
                 }
 
                 @JsonNotification

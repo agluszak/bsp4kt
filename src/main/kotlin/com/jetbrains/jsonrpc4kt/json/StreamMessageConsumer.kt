@@ -1,7 +1,6 @@
 package com.jetbrains.jsonrpc4kt.json
 
 import com.jetbrains.jsonrpc4kt.JsonRpcException
-import com.jetbrains.jsonrpc4kt.MessageConsumer
 import com.jetbrains.jsonrpc4kt.messages.Message
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_LENGTH_HEADER
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_TYPE_HEADER
@@ -16,7 +15,6 @@ import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.locks.ReentrantLock
 
 
 /**

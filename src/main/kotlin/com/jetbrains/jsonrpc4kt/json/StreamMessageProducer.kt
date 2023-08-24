@@ -14,6 +14,7 @@ import java.io.UnsupportedEncodingException
 import java.nio.charset.StandardCharsets
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.jvm.jvmName
 
 
@@ -154,6 +155,7 @@ class StreamMessageProducer(
             val content = String(buffer, charset(headers.charset))
             val message: Message = jsonHandler.deserializeMessage(content)
             messageChannel.send(message)
+            println("message sent: $message")
 //            messageChannel.trySend(message).getOrThrow()
         } catch (e: UnsupportedEncodingException) {
             // UnsupportedEncodingException can be thrown by String constructor

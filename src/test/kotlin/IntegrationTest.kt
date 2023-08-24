@@ -6,6 +6,8 @@ import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CRLF
 import com.jetbrains.jsonrpc4kt.services.JsonNotification
 import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.coroutines.*
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -16,8 +18,6 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
-import java.util.concurrent.CancellationException
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.jvm.jvmName
@@ -65,12 +65,12 @@ class IntegrationTest {
         out.connect(in2)
         val client: MyClient = MyClientImpl()
         val clientSideLauncher: Launcher<MyClient, MyServer> =
-            Launcher(`in`, out, client, MyServer::class, coroutineScope = this)
+            Launcher(`in`, out, client, MyServer::class)
 
         // create server side
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class, coroutineScope = this)
+            Launcher(in2, out2, server, MyClient::class)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -97,7 +97,7 @@ class IntegrationTest {
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+            Launcher(`in`, out, server, MyClient::class)
 
         serverSideLauncher.start().join()
 
@@ -110,6 +110,8 @@ class IntegrationTest {
             expectedJson,
             actualJson
         )
+
+        println()
     }
 
     @Test
@@ -124,7 +126,7 @@ class IntegrationTest {
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+            Launcher(`in`, out, server, MyClient::class)
 
         serverSideLauncher.start().join()
 
@@ -150,7 +152,7 @@ class IntegrationTest {
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+            Launcher(`in`, out, server, MyClient::class)
 
         serverSideLauncher.start().join()
 
@@ -181,7 +183,7 @@ class IntegrationTest {
             }
         }
         val clientSideLauncher: Launcher<MyClient, MyVoidServer> =
-            Launcher(`in`, out, client, MyVoidServer::class, this)
+            Launcher(`in`, out, client, MyVoidServer::class)
 
         // create server side
         val server: MyServer = object : MyServer {
@@ -190,7 +192,7 @@ class IntegrationTest {
             }
         }
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class, this)
+            Launcher(in2, out2, server, MyClient::class)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -216,54 +218,46 @@ class IntegrationTest {
         val out2 = PipedOutputStream()
         `in`.connect(out2)
         out.connect(in2)
-        val inComputeAsync = AtomicBoolean(false)
-        val cancellationHappened = AtomicBoolean(false)
+        val inComputeAsync = Channel<Unit>()
+        val cancellationHappened = Channel<Unit>()
         val client: MyClient = object : MyClient {
             override suspend fun askClient(param: MyParam): MyParam {
                 try {
-                    inComputeAsync.set(true)
+                    inComputeAsync.send(Unit)
                     while (true) {
                         delay(50)
                     }
-                } catch (e: Exception) {
-                    println("Exception: $e")
+
+                } catch (e: CancellationException) {
+                    cancellationHappened.send(Unit)
+                    throw e
                 }
-//                } catch (e: CancellationException) {
-//                    cancellationHappened.set(true)
-//                } catch (e: InterruptedException) {
-//                    fail("Thread was interrupted unexpectedly.")
-//                }
                 return param
             }
         }
-        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class, this)
+        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
 
-        val future = async { serverSideLauncher.remoteProxy.askClient(MyParam("FOO")) }
-        var startTime = System.currentTimeMillis()
-        while (!inComputeAsync.get()) {
-            delay(50)
-            if (System.currentTimeMillis() - startTime > TIMEOUT) fail("Timeout waiting for client to start computing.") as Any
+        val future = async {
+            println(this.coroutineContext)
+
+            serverSideLauncher.remoteProxy.askClient(MyParam("FOO"))
         }
+        inComputeAsync.receive()
         println("Cancelling")
         future.cancel()
-        println("should have cancelled")
-        startTime = System.currentTimeMillis()
-        while (!cancellationHappened.get()) {
-            delay(50)
-            if (System.currentTimeMillis() - startTime > TIMEOUT) fail("Timeout waiting for confirmation of cancellation.") as Any
-        }
-        try {
-            future.await()
-            fail("Expected cancellation.")
-        } catch (_: CancellationException) {
-        }
+        cancellationHappened.receive()
+        println("Cancelled received")
+        future.join()
+
+        out.close()
+        out2.close()
     }
 
     @Test
@@ -281,11 +275,9 @@ class IntegrationTest {
         val server: MyServer = object : MyServer {
             override suspend fun askServer(param: MyParam): MyParam {
                 try {
-                    val startTime: Long = System.currentTimeMillis()
-                    do {
-                        yield()
+                    while (true) {
                         delay(50)
-                    } while (System.currentTimeMillis() - startTime < TIMEOUT)
+                    }
                 } catch (e: InterruptedException) {
                     fail("Thread was interrupted unexpectedly.")
                 }
@@ -293,7 +285,7 @@ class IntegrationTest {
             }
         }
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+            Launcher(`in`, out, server, MyClient::class)
 
 
         serverSideLauncher.start().join()
@@ -318,7 +310,6 @@ class IntegrationTest {
         val in2 = PipedInputStream()
         val out2 = PipedOutputStream()
 
-        val otherScope = CoroutineScope(Dispatchers.Default)
         `in`.connect(out2)
         out.connect(in2)
         val client: MyClient = object : MyClient {
@@ -335,11 +326,11 @@ class IntegrationTest {
                 return param
             }
         }
-        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class, otherScope)
+        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -381,7 +372,7 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
+            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class)
 
             serverSideLauncher.start().join()
 
@@ -416,7 +407,7 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
+            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class)
 
 
             serverSideLauncher.start().join()
@@ -457,7 +448,7 @@ class IntegrationTest {
             val server: UnexpectedParamsTestServer = object : UnexpectedParamsTestServer {
                 override fun myNotification() {}
             }
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
+            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class)
 
             serverSideLauncher.start().join()
 
@@ -482,7 +473,7 @@ class IntegrationTest {
 //        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
 //        val out = ByteArrayOutputStream()
 //        val server: MyServer = MyServerImpl()
-//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher(`in`, out, server, MyClient::class, this)
+//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher(`in`, out, server, MyClient::class)
 //        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 //        assertEquals(
 //            (("Content-Length: 214$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\",\"data\":{\"message\":\"com.google.gson.stream.MalformedJsonException: Expected value at line 4 column 22 path $.params.value\"}}}Content-Length: 51$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),
@@ -533,7 +524,7 @@ class IntegrationTest {
 //        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
 //        val out = ByteArrayOutputStream()
 //        val server: MyServer = MyServerImpl()
-//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher(`in`, out, server, MyClient::class, this)
+//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher(`in`, out, server, MyClient::class)
 //        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 //        assertEquals(
 //            """Content-Length: 165$CRLF$CRLF{"jsonrpc":"2.0","id":"1","error":{"code":-32700,"message":"Message could not be parsed.","data":{"message":"Unterminated object at line 5 column 2 path $.params"}}}Content-Length: 51$CRLF$CRLF{"jsonrpc":"2.0","id":"2","result":{"value":"bar"}}""",
@@ -552,7 +543,7 @@ class IntegrationTest {
 //        val `in` = ByteArrayInputStream(clientMessages.toByteArray())
 //        val out = ByteArrayOutputStream()
 //        val server: MyServer = MyServerImpl()
-//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher(`in`, out, server, MyClient::class, this)
+//        val serverSideLauncher: Launcher<MyServer, MyClient> = Launcher(`in`, out, server, MyClient::class)
 //        serverSideLauncher.startListening().get(TIMEOUT, TimeUnit.MILLISECONDS)
 //        assertEquals(
 //            (("Content-Length: 195$CRLF$CRLF{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"error\":{\"code\":-32700,\"message\":\"Message could not be parsed.\",\"data\":{\"message\":\"Use JsonReader.setLenient(true) to accept malformed JSON at line 5 column 3 path $\"}}}Content-Length: 51$CRLF$CRLF").toString() + "{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"value\":\"bar\"}}"),

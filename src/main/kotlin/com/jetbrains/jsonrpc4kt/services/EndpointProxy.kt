@@ -35,12 +35,6 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
         }
     }
 
-    private inline fun handleInvocationTargetException(action: () -> Any?): Any? = try {
-        action()
-    } catch (e: InvocationTargetException) {
-        throw e.cause!!
-    }
-
     private fun invokeSuspendFunction(
         continuation: Continuation<*>,
         suspendFunction: suspend () -> Any?,
@@ -90,5 +84,15 @@ class EndpointProxy<Remote : Any>(private val delegate: Endpoint, remoteInterfac
 
     override fun toString(): String {
         return javaClass.simpleName + " for " + delegate.toString()
+    }
+
+    companion object {
+        inline fun handleInvocationTargetException(action: () -> Any?): Any? = try {
+            action()
+        } catch (e: InvocationTargetException) {
+            throw e.cause!!
+        } catch (e: Exception) {
+            throw e
+        }
     }
 }

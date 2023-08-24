@@ -21,7 +21,7 @@ import java.nio.charset.StandardCharsets
  * A message consumer that serializes messages to JSON and sends them to an output stream.
  */
 class StreamMessageConsumer(
-    private var output: OutputStream,
+    private val output: OutputStream,
     private val jsonHandler: MessageJsonHandler,
     private val messageChannel: ReceiveChannel<Message>,
     private val encoding: String = StandardCharsets.UTF_8.name()
@@ -30,7 +30,9 @@ class StreamMessageConsumer(
 
     fun start(coroutineScope: CoroutineScope): Job =
         coroutineScope.launch {
+            println("consumer listening")
             for (message in messageChannel) {
+                println("consumer got message $message")
                 try {
                     val content = jsonHandler.serializeMessage(message)
                     val contentBytes = content.toByteArray(charset(encoding))
@@ -46,6 +48,8 @@ class StreamMessageConsumer(
                     throw JsonRpcException(exception)
                 }
             }
+            println("consumer closing")
+            output.close()
         }
 
     /**

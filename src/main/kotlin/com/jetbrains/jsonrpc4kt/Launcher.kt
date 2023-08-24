@@ -8,16 +8,15 @@ import com.jetbrains.jsonrpc4kt.json.StreamMessageProducer
 import com.jetbrains.jsonrpc4kt.messages.Message
 import com.jetbrains.jsonrpc4kt.messages.ResponseError
 import com.jetbrains.jsonrpc4kt.services.ServiceEndpoints
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.InternalCoroutinesApi
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.function.Function
 import java.util.logging.Logger
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.KClass
 import kotlin.reflect.jvm.jvmName
 
@@ -33,7 +32,6 @@ class Launcher<Local : Any, Remote : Any>(
     val output: OutputStream,
     val localService: Local,
     val remoteInterface: KClass<out Remote>,
-    val coroutineScope: CoroutineScope,
     val json: Json = Json {
         ignoreUnknownKeys = true
     },
@@ -65,28 +63,37 @@ class Launcher<Local : Any, Remote : Any>(
     val producer = StreamMessageProducer(input, jsonHandler, producerChannel)
     val consumer = StreamMessageConsumer(output, jsonHandler, consumerChannel)
 
+    val coroutineScope = CoroutineScope(EmptyCoroutineContext)
+
     val localEndpoint = ServiceEndpoints.toEndpoint(localService)
     val remoteEndpoint =
         RemoteEndpoint(producerChannel, consumerChannel, localEndpoint, jsonHandler, coroutineScope, exceptionHandler)
     val remoteProxy = ServiceEndpoints.toServiceObject(remoteEndpoint, remoteInterface)
 
+
+
     @OptIn(InternalCoroutinesApi::class)
     fun start(): Job {
         val job = coroutineScope.launch {
-            val producer = producer.start(this)
-            val endpoint = remoteEndpoint.start(this)
-            val consumer = consumer.start(this)
+                val producer = producer.start(this)
+                val endpoint = remoteEndpoint.start(this)
+                val consumer = consumer.start(this)
 
-            producer.join()
-            endpoint.join()
-            consumer.join()
+                println("launcher finishing")
+                producer.join()
+                println("producer joined")
+                endpoint.join()
+                println("ednpoint joined")
+                consumer.join()
+                println("consumer joined")
+                throw CancellationException() // TODO ???
         }
 
-        // TODO: Refactor to not use internal API
-        job.invokeOnCompletion(true, true) {
-            input.close()
-            output.close()
-        }
+//        // TODO: Refactor to not use internal API
+//        job.invokeOnCompletion(true, true) {
+//            input.close()
+//            output.close()
+//        }
 
         return job
     }

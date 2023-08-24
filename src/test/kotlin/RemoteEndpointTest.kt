@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.typeOf
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -24,12 +25,14 @@ class RemoteEndpointTest {
     )
 
     internal open class TestEndpoint(val jsonHandler: MessageJsonHandler) : Endpoint {
-        var notifications: MutableList<NotificationMessage> = ArrayList()
-        var requests: MutableMap<RequestMessage, CompletableDeferred<Any?>> = LinkedHashMap()
+        val notifications: Channel<NotificationMessage> = Channel()
+        val requests: Channel<Pair<RequestMessage, CompletableDeferred<Any?>>> = Channel()
 
         override fun notify(method: String, params: List<Any?>) {
-            val serializedParams = jsonHandler.serializeParams(method, params)
-            notifications.add(NotificationMessage(method, serializedParams))
+            CoroutineScope(EmptyCoroutineContext).launch {
+                val serializedParams = jsonHandler.serializeParams(method, params)
+                notifications.send(NotificationMessage(method, serializedParams))
+            }
         }
 
         override suspend fun request(method: String, params: List<Any?>): Any? {
@@ -37,7 +40,7 @@ class RemoteEndpointTest {
                 currentCoroutineContext().job
             )
             val serializedParams = jsonHandler.serializeParams(method, params)
-            requests[RequestMessage(MessageId.StringId("asd"), method, serializedParams)] = completableDeferred
+            requests.send(RequestMessage(MessageId.StringId("asd"), method, serializedParams) to completableDeferred)
 
             return completableDeferred.await()
         }
@@ -54,7 +57,7 @@ class RemoteEndpointTest {
 
         inputChannel.send(NotificationMessage("notification", JsonParams.array(JsonPrimitive("myparam"))))
 
-        val notificationMessage: NotificationMessage = endp.notifications[0]
+        val notificationMessage: NotificationMessage = endp.notifications.receive()
         assertEquals("notification", notificationMessage.method)
         assertEquals(JsonParams.array(JsonPrimitive("myparam")), notificationMessage.params)
         assertTrue(outputChannel.isEmpty)
@@ -78,8 +81,8 @@ class RemoteEndpointTest {
                 JsonParams.array(JsonPrimitive("myparam"))
             )
         )
-        delay(1000) // todo change this test
-        val (key, value) = endp.requests.entries.iterator().next()
+
+        val (key, value) = endp.requests.receive()
         value.complete("success")
         assertEquals("request", key.method)
         assertEquals(JsonParams.array(JsonPrimitive("myparam")), key.params)
@@ -89,6 +92,8 @@ class RemoteEndpointTest {
         assertEquals(MessageId.StringId("1"), responseMessage.id)
 
         inputChannel.close()
+
+        delay(1000)
     }
 
     @Test
@@ -101,11 +106,12 @@ class RemoteEndpointTest {
         endpoint.start(this)
 
         inputChannel.send(RequestMessage(MessageId.NumberId(1), "request", JsonParams.array(JsonPrimitive("myparam"))))
-        delay(1000) // todo change this test
-        val (key, value) = endp.requests.entries.iterator().next()
+
+        val (key, value) = endp.requests.receive()
         value.complete("success")
         assertEquals("request", key.method)
         assertEquals(JsonParams.array(JsonPrimitive("myparam")), key.params)
+
         val responseMessage = outputChannel.receive() as ResponseMessage.Result
         assertEquals(JsonPrimitive("success"), responseMessage.result)
         assertEquals(MessageId.NumberId(1), responseMessage.id)
@@ -128,9 +134,8 @@ class RemoteEndpointTest {
                 JsonParams.array(JsonPrimitive("myparam"))
             )
         )
-        delay(1000) // todo change this test
 
-        val (_, value) = endp.requests.entries.iterator().next()
+        val (_, value) = endp.requests.receive()
         value.cancel()
         val message = outputChannel.receive() as ResponseMessage.Error
         val error = message.error
@@ -162,7 +167,9 @@ class RemoteEndpointTest {
                     JsonParams.array(JsonPrimitive("myparam"))
                 )
             )
+            println("TEST request sent ${currentCoroutineContext().job}")
             val response = outputChannel.receive() as ResponseMessage.Error
+            println("TEST response received")
             val error = response.error
             assertEquals("Internal error.", error.message)
             assertEquals(ResponseErrorCode.InternalError.code, error.code)
@@ -170,6 +177,9 @@ class RemoteEndpointTest {
             assertTrue(exception.toString().contains("java.lang.RuntimeException: BAAZ"))
 
             inputChannel.close()
+
+            println("co by tu jeszcze zamknąć")
+            outputChannel.close()
         }
     }
 

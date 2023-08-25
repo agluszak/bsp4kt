@@ -46,6 +46,7 @@ class RemoteEndpoint(
     private val receivedRequestMapMutex = Mutex()
     private val waker = Channel<Unit>()
     private val messagesBeingHandled = AtomicInteger()
+    private val localEndpointSupervisor = SupervisorJob(coroutineScope.coroutineContext.job)
 
     /**
      * Information about requests that have been sent and for which no response has been received yet.
@@ -59,7 +60,7 @@ class RemoteEndpoint(
         println("remote endpoint starting listening")
         for (message in `in`) {
             startHandling()
-            coroutineScope.launch {
+            launch {
                 println("remote endpoint received message $message")
                 try {
                     when (message) {
@@ -76,23 +77,27 @@ class RemoteEndpoint(
                         }
                     }
                 } finally {
+                    println("endpoint start finally " + this.coroutineContext.job + this.coroutineContext.job.children.toList()+ localEndpointSupervisor.children.toList())
                     finishHandling()
                 }
             }
         }
+
+        println("between stopping")
 
 
         while (true) {
             println("endpoint woke to see if all messages have been handled")
             if (messagesBeingHandled.get() == 0) {
                 println("remote endpoint: all messages handled, closing output")
+                localEndpointSupervisor.cancelAndJoin()
                 waker.close()
                 out.close()
                 break
             }
             waker.receive()
         }
-        println("remote endpoint: done")
+        println("remote endpoint: done" + this.coroutineContext.job + this.coroutineContext.job.children.toList())
     }
 
     /**
@@ -142,10 +147,12 @@ class RemoteEndpoint(
             println("REQUEST received result")
             return result
         } catch (exception: CancellationException) {
+            println("REQUEST got cancelled")
             sendCancelNotification(id)
             resultDeferred.completeExceptionally(exception)
             throw exception
         } catch (exception: Exception) {
+            println("REQUEST got exception $exception")
             resultDeferred.completeExceptionally(exception)
             throw exception
         }
@@ -165,12 +172,15 @@ class RemoteEndpoint(
             // We have no pending request information that matches the id given in the response
             LOG.info { "Unmatched response message: $responseMessage" }
         } else when (responseMessage) {
-            is ResponseMessage.Error ->
+            is ResponseMessage.Error -> {
                 // The remote service has replied with an error
+                println("RESPONSE got error")
                 requestInfo.future.completeExceptionally(ResponseErrorException(responseMessage.error))
+            }
 
             is ResponseMessage.Result -> {
                 // The remote service has replied with a result object
+                println("RESPONSE got result")
                 try {
                     val deserialized =
                         jsonHandler.deserializeResult(requestInfo.requestMessage.method, responseMessage.result)
@@ -204,6 +214,7 @@ class RemoteEndpoint(
     private fun finishHandling() {
         messagesBeingHandled.decrementAndGet()
         waker.trySend(Unit)
+        println("finished handling")
     }
 
     private fun handleNotification(notificationMessage: NotificationMessage) {
@@ -267,29 +278,25 @@ class RemoteEndpoint(
         try {
             val params = jsonHandler.deserializeParams(requestMessage)
             // Forward the request to the local endpoint
-            val resultDeferred =
-                CoroutineScope(
-                    CoroutineName("Executing incoming request $messageId") + SupervisorJob(
-                        currentCoroutineContext().job
-                    )
-                ).async(start = CoroutineStart.LAZY) {
-                    println("before local endpoint request + $this")
+            val resultDeferred = coroutineScope.async(localEndpointSupervisor, start = CoroutineStart.LAZY) {
+                        println("before local endpoint request + $this")
 
-                    try {
-                        val res = handleInvocationTargetException {
-                            localEndpoint.request(
-                                requestMessage.method,
-                                params
-                            )
+                        try {
+                            val res = handleInvocationTargetException {
+                                localEndpoint.request(
+                                    requestMessage.method,
+                                    params
+                                )
+                            }
+                            println("INSIDE done ${this.coroutineContext.job} ${this.coroutineContext.job.children.toList()}")
+
+                            res
+                        } catch (e: Exception) {
+                            println("local endpoint request exception: $e ${e.message}")
+
+                            throw e
                         }
-                        println("INSIDE done ${this.coroutineContext.job}")
-                        res
-                    } catch (e: Exception) {
-                        println("local endpoint request exception: $e")
-                        println(e.message)
-                        throw e
                     }
-                }
             println("handleRequest: $resultDeferred")
             receivedRequestMap[messageId] = resultDeferred
             println("handleRequest: $receivedRequestMap")
@@ -323,7 +330,7 @@ class RemoteEndpoint(
             println("handleRequest: throwable $throwable")
             // The local endpoint has failed handling the request - reply with an error response
             val errorObject: ResponseError = exceptionHandler.apply(throwable)
-            println("handleRequest: throwable in try")
+            println("handleRequest: throwable in try, ${out.isClosedForSend}, $errorObject")
             out.send(ResponseMessage.Error(messageId, errorObject))
             println("handleRequest: throwable in try sent")
             if (throwable is Error) throw throwable else return
@@ -333,6 +340,7 @@ class RemoteEndpoint(
             if (request != null) {
                 println("handleRequest: finally")
                 request.cancel()
+                println("handleRequest: finallycancelled")
             }
 
         }

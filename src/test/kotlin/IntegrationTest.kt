@@ -13,19 +13,23 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.fail
+import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestMethodOrder
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
+import java.util.concurrent.atomic.AtomicLong
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.jvm.jvmName
 import kotlin.test.assertFailsWith
 
+@TestMethodOrder(MethodOrderer.Random::class)
 class IntegrationTest {
     @Serializable
-    class MyParam(val value: String?)
+    data class MyParam(val value: String?)
 
     interface MyServer {
         @JsonRequest
@@ -54,6 +58,46 @@ class IntegrationTest {
         }
     }
 
+    class MyClientWaiter(val delayMillis: AtomicLong = AtomicLong()) : MyClient {
+        override suspend fun askClient(param: MyParam): MyParam {
+            delay(delayMillis.get())
+            return param
+        }
+
+    }
+
+    @Test
+    fun `many concurrent requests`() = runTest {
+        val `in` = PipedInputStream()
+        val out = PipedOutputStream()
+        val in2 = PipedInputStream()
+        val out2 = PipedOutputStream()
+        `in`.connect(out2)
+        out.connect(in2)
+        val client = MyClientWaiter()
+        val clientSideLauncher: Launcher<MyClient, MyServer> =
+            Launcher(`in`, out, client, MyServer::class, this)
+
+        // create server side
+        val server: MyServer = MyServerImpl()
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher(in2, out2, server, MyClient::class, this)
+
+        clientSideLauncher.start()
+        serverSideLauncher.start()
+
+        val results = mutableListOf< Deferred<MyParam>>()
+        for (i in 0..< 100) {
+            val future = async {  clientSideLauncher.remoteProxy.askServer(MyParam("FOO"))  }
+            results.add(future)
+        }
+
+        for (result in results) {
+            assertEquals(result.await().value, "FOO")
+        }
+
+    }
+
     @Test
     fun testBothDirectionRequests() = runTest {
         // create client side
@@ -65,23 +109,35 @@ class IntegrationTest {
         out.connect(in2)
         val client: MyClient = MyClientImpl()
         val clientSideLauncher: Launcher<MyClient, MyServer> =
-            Launcher(`in`, out, client, MyServer::class)
+            Launcher(`in`, out, client, MyServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class)
+            Launcher(in2, out2, server, MyClient::class, this)
 
-        clientSideLauncher.start()
-        serverSideLauncher.start()
+        val  clientJob = clientSideLauncher.start()
+        val serverJob = serverSideLauncher.start()
         val fooFuture = async { clientSideLauncher.remoteProxy.askServer(MyParam("FOO")) }
         val barFuture = async { serverSideLauncher.remoteProxy.askClient(MyParam("BAR")) }
+
+        println("starting to wait")
 
         assertEquals("FOO", fooFuture.await().value)
         assertEquals("BAR", barFuture.await().value)
 
+        println("test ending: " + this.coroutineContext.job.children.toList())
+
         out.close()
         out2.close()
+
+
+        clientJob.join()
+        println("client joined")
+        serverJob.join()
+        println("server joined")
+
+
 
     }
 
@@ -97,7 +153,7 @@ class IntegrationTest {
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class)
+            Launcher(`in`, out, server, MyClient::class, this)
 
         serverSideLauncher.start().join()
 
@@ -110,8 +166,6 @@ class IntegrationTest {
             expectedJson,
             actualJson
         )
-
-        println()
     }
 
     @Test
@@ -126,7 +180,7 @@ class IntegrationTest {
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class)
+            Launcher(`in`, out, server, MyClient::class, this)
 
         serverSideLauncher.start().join()
 
@@ -152,7 +206,7 @@ class IntegrationTest {
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class)
+            Launcher(`in`, out, server, MyClient::class, this)
 
         serverSideLauncher.start().join()
 
@@ -183,7 +237,7 @@ class IntegrationTest {
             }
         }
         val clientSideLauncher: Launcher<MyClient, MyVoidServer> =
-            Launcher(`in`, out, client, MyVoidServer::class)
+            Launcher(`in`, out, client, MyVoidServer::class, this)
 
         // create server side
         val server: MyServer = object : MyServer {
@@ -192,7 +246,7 @@ class IntegrationTest {
             }
         }
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class)
+            Launcher(in2, out2, server, MyClient::class, this)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -235,11 +289,11 @@ class IntegrationTest {
                 return param
             }
         }
-        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class)
+        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class)
+        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -258,6 +312,8 @@ class IntegrationTest {
 
         out.close()
         out2.close()
+
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -285,7 +341,7 @@ class IntegrationTest {
             }
         }
         val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class)
+            Launcher(`in`, out, server, MyClient::class, this)
 
 
         serverSideLauncher.start().join()
@@ -326,11 +382,11 @@ class IntegrationTest {
                 return param
             }
         }
-        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class)
+        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class)
+        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -372,7 +428,7 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class)
+            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
 
             serverSideLauncher.start().join()
 
@@ -407,7 +463,7 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class)
+            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
 
 
             serverSideLauncher.start().join()
@@ -448,7 +504,7 @@ class IntegrationTest {
             val server: UnexpectedParamsTestServer = object : UnexpectedParamsTestServer {
                 override fun myNotification() {}
             }
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class)
+            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
 
             serverSideLauncher.start().join()
 

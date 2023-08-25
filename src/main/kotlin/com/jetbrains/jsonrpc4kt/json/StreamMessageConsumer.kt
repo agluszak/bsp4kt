@@ -39,17 +39,21 @@ class StreamMessageConsumer(
                     val contentLength = contentBytes.size
                     val header = getHeader(contentLength)
                     val headerBytes = header.toByteArray(StandardCharsets.US_ASCII)
+                    println("output writing" + content)
                     mutex.withLock {
                         output.write(headerBytes)
                         output.write(contentBytes)
                         output.flush()
                     }
+                    println("output WROTE" + content)
                 } catch (exception: IOException) {
                     throw JsonRpcException(exception)
                 }
             }
             println("consumer closing")
-            output.close()
+            mutex.withLock {
+                output.close()
+            }
         }
 
     /**

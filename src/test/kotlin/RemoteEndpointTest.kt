@@ -94,6 +94,8 @@ class RemoteEndpointTest {
         inputChannel.close()
 
         delay(1000)
+
+        println(this.coroutineContext.job.children.toList())
     }
 
     @Test

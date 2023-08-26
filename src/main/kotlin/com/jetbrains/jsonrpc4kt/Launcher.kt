@@ -75,6 +75,7 @@ class Launcher<Local : Any, Remote : Any>(
     @OptIn(InternalCoroutinesApi::class)
     fun start(): Job = coroutineScope.launch {
         try {
+            println("launcher starting")
             val producer = producer.start(this)
             val endpoint = remoteEndpoint.start(this)
             val consumer = consumer.start(this)
@@ -87,10 +88,12 @@ class Launcher<Local : Any, Remote : Any>(
             consumer.join()
             println("consumer joined")
         } finally {
+            println("launcher closing")
             producerChannel.close()
             consumerChannel.close()
             input.close()
             output.close()
+            println("launcher closed")
         }
     }
 

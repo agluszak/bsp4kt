@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.Function
 import java.util.logging.Level
 import java.util.logging.Logger
-import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.reflect.jvm.jvmName
 
 /**
@@ -46,7 +45,7 @@ class RemoteEndpoint(
     private val receivedRequestMapMutex = Mutex()
     private val waker = Channel<Unit>()
     private val messagesBeingHandled = AtomicInteger()
-    private val localEndpointSupervisor = SupervisorJob(coroutineScope.coroutineContext.job)
+    private lateinit var localEndpointSupervisor: Job
 
     /**
      * Information about requests that have been sent and for which no response has been received yet.
@@ -58,46 +57,51 @@ class RemoteEndpoint(
 
     fun start(coroutineScope: CoroutineScope): Job = coroutineScope.launch {
         println("remote endpoint starting listening")
-        for (message in `in`) {
-            startHandling()
-            launch {
-                println("remote endpoint received message $message")
-                try {
-                    when (message) {
-                        is NotificationMessage -> {
-                            handleNotification(message)
-                        }
+        localEndpointSupervisor = SupervisorJob(this.coroutineContext.job)
+        try {
+            for (message in `in`) {
+                startHandling()
+                launch {
+                    println("remote endpoint received message $message")
+                    try {
+                        when (message) {
+                            is NotificationMessage -> {
+                                handleNotification(message)
+                            }
 
-                        is RequestMessage -> {
-                            handleRequest(message)
-                        }
+                            is RequestMessage -> {
+                                handleRequest(message)
+                            }
 
-                        is ResponseMessage -> {
-                            handleResponse(message)
+                            is ResponseMessage -> {
+                                handleResponse(message)
+                            }
                         }
+                    } finally {
+                        println("endpoint start finally " + this.coroutineContext.job + this.coroutineContext.job.children.toList() + localEndpointSupervisor.children.toList())
+                        finishHandling()
                     }
-                } finally {
-                    println("endpoint start finally " + this.coroutineContext.job + this.coroutineContext.job.children.toList()+ localEndpointSupervisor.children.toList())
-                    finishHandling()
                 }
             }
-        }
 
-        println("between stopping")
+            println("between stopping")
 
 
-        while (true) {
-            println("endpoint woke to see if all messages have been handled")
-            if (messagesBeingHandled.get() == 0) {
-                println("remote endpoint: all messages handled, closing output")
-                localEndpointSupervisor.cancelAndJoin()
-                waker.close()
-                out.close()
-                break
+            while (true) {
+                println("endpoint woke to see if all messages have been handled")
+                if (messagesBeingHandled.get() == 0) {
+                    println("remote endpoint: all messages handled, closing output")
+                    localEndpointSupervisor.cancelAndJoin()
+                    waker.close()
+                    break
+                }
+                waker.receive()
             }
-            waker.receive()
+            println("remote endpoint: done" + this.coroutineContext.job + this.coroutineContext.job.children.toList())
+        } finally {
+            localEndpointSupervisor.cancelAndJoin()
+            out.close()
         }
-        println("remote endpoint: done" + this.coroutineContext.job + this.coroutineContext.job.children.toList())
     }
 
     /**
@@ -279,24 +283,24 @@ class RemoteEndpoint(
             val params = jsonHandler.deserializeParams(requestMessage)
             // Forward the request to the local endpoint
             val resultDeferred = coroutineScope.async(localEndpointSupervisor, start = CoroutineStart.LAZY) {
-                        println("before local endpoint request + $this")
+                println("before local endpoint request + $this")
 
-                        try {
-                            val res = handleInvocationTargetException {
-                                localEndpoint.request(
-                                    requestMessage.method,
-                                    params
-                                )
-                            }
-                            println("INSIDE done ${this.coroutineContext.job} ${this.coroutineContext.job.children.toList()}")
-
-                            res
-                        } catch (e: Exception) {
-                            println("local endpoint request exception: $e ${e.message}")
-
-                            throw e
-                        }
+                try {
+                    val res = handleInvocationTargetException {
+                        localEndpoint.request(
+                            requestMessage.method,
+                            params
+                        )
                     }
+                    println("INSIDE done ${this.coroutineContext.job} ${this.coroutineContext.job.children.toList()}")
+
+                    res
+                } catch (e: Exception) {
+                    println("local endpoint request exception: $e ${e.message}")
+
+                    throw e
+                }
+            }
             println("handleRequest: $resultDeferred")
             receivedRequestMap[messageId] = resultDeferred
             println("handleRequest: $receivedRequestMap")

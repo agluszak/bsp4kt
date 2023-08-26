@@ -2,6 +2,7 @@ import com.jetbrains.jsonrpc4kt.Launcher
 import com.jetbrains.jsonrpc4kt.services.JsonNotification
 import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
@@ -47,9 +48,9 @@ class LauncherTest {
         }
         val input = PipedInputStream()
         val outputStream = PipedOutputStream(input)
-        val writer = OutputStreamWriter(outputStream)
         val launcher = Launcher(input, outputStream, a, A::class, this)
         val startListening = launcher.start()
+        delay(100)
         startListening.cancelAndJoin()
         assertTrue(startListening.isCompleted)
         assertTrue(startListening.isCancelled)
@@ -80,13 +81,8 @@ class LauncherTest {
             override fun say(p: Param) {}
         }
         val input = object : InputStream() {
-            @Throws(IOException::class)
             override fun read(): Int {
-                try {
-                    Thread.sleep(100)
-                } catch (e: InterruptedException) {
-                    throw RuntimeException(e)
-                }
+                Thread.sleep(1000)
                 return '\n'.code
             }
         }

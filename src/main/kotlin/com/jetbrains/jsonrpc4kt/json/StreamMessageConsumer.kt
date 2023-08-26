@@ -6,10 +6,8 @@ import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_LENGTH_HEADER
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_TYPE_HEADER
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CRLF
 import com.jetbrains.jsonrpc4kt.messages.Message.Companion.JSON_MIME_TYPE
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.IOException
@@ -40,10 +38,12 @@ class StreamMessageConsumer(
                     val header = getHeader(contentLength)
                     val headerBytes = header.toByteArray(StandardCharsets.US_ASCII)
                     println("output writing" + content)
-                    mutex.withLock {
-                        output.write(headerBytes)
-                        output.write(contentBytes)
-                        output.flush()
+                    withContext(Dispatchers.IO) {
+                        mutex.withLock {
+                            output.write(headerBytes)
+                            output.write(contentBytes)
+                            output.flush()
+                        }
                     }
                     println("output WROTE" + content)
                 } catch (exception: IOException) {

@@ -96,6 +96,9 @@ class IntegrationTest {
             assertEquals(result.await().value, "FOO")
         }
 
+        out.close()
+        out2.close()
+
     }
 
     @Test

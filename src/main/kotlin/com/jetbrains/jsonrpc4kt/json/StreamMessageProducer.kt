@@ -26,7 +26,7 @@ class StreamMessageProducer(
     private val input: InputStream,
     private val jsonHandler: MessageJsonHandler,
     private val messageChannel: SendChannel<Message>,
-) : Closeable {
+) {
 
     private var keepRunning = false
 
@@ -49,6 +49,7 @@ class StreamMessageProducer(
                 if (c == -1) {
                     // End of input stream has been reached
                     keepRunning = false
+                    println("reached EOF")
                 } else {
                     if (debugBuilder == null) debugBuilder = StringBuilder()
                     debugBuilder.append(c.toChar())
@@ -168,12 +169,6 @@ class StreamMessageProducer(
             logError(e)
         }
         return true
-    }
-
-    override fun close() {
-        keepRunning = false
-        input.close()
-        messageChannel.close()
     }
 
     companion object {

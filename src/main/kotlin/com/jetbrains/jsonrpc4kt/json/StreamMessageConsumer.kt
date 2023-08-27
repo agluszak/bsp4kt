@@ -47,6 +47,11 @@ class StreamMessageConsumer(
                     }
                     println("output WROTE" + content)
                 } catch (exception: IOException) {
+                    if (JsonRpcException.indicatesStreamClosed(exception)) {
+                        println("stream closed")
+                        break
+                    }
+                    println("got $exception when trying to write $message")
                     throw JsonRpcException(exception)
                 }
             }

@@ -6,7 +6,6 @@ import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CRLF
 import com.jetbrains.jsonrpc4kt.services.JsonNotification
 import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.coroutines.*
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
@@ -20,7 +19,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.PipedInputStream
 import java.io.PipedOutputStream
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Level
 import java.util.logging.Logger
 import kotlin.reflect.jvm.jvmName
@@ -58,10 +57,9 @@ class IntegrationTest {
         }
     }
 
-    class MyClientWaiter(val delayMillis: AtomicLong = AtomicLong()) : MyClient {
+    class MyClientWaiter(val channel: Channel<MyParam>) : MyClient {
         override suspend fun askClient(param: MyParam): MyParam {
-            delay(delayMillis.get())
-            return param
+            return channel.receive()
         }
 
     }
@@ -74,7 +72,7 @@ class IntegrationTest {
         val out2 = PipedOutputStream()
         `in`.connect(out2)
         out.connect(in2)
-        val client = MyClientWaiter()
+        val client = MyClientImpl()
         val clientSideLauncher: Launcher<MyClient, MyServer> =
             Launcher(`in`, out, client, MyServer::class, this)
 
@@ -86,9 +84,9 @@ class IntegrationTest {
         clientSideLauncher.start()
         serverSideLauncher.start()
 
-        val results = mutableListOf< Deferred<MyParam>>()
-        for (i in 0..< 100) {
-            val future = async {  clientSideLauncher.remoteProxy.askServer(MyParam("FOO"))  }
+        val results = mutableListOf<Deferred<MyParam>>()
+        for (i in 0..<100) {
+            val future = async { clientSideLauncher.remoteProxy.askServer(MyParam("FOO")) }
             results.add(future)
         }
 
@@ -119,7 +117,7 @@ class IntegrationTest {
         val serverSideLauncher: Launcher<MyServer, MyClient> =
             Launcher(in2, out2, server, MyClient::class, this)
 
-        val  clientJob = clientSideLauncher.start()
+        val clientJob = clientSideLauncher.start()
         val serverJob = serverSideLauncher.start()
         val fooFuture = async { clientSideLauncher.remoteProxy.askServer(MyParam("FOO")) }
         val barFuture = async { serverSideLauncher.remoteProxy.askClient(MyParam("BAR")) }
@@ -139,7 +137,6 @@ class IntegrationTest {
         println("client joined")
         serverJob.join()
         println("server joined")
-
 
 
     }
@@ -223,6 +220,64 @@ class IntegrationTest {
             actualJson
         )
 
+    }
+
+    @Test
+    fun `server and client talk for a while`() = runTest {
+        val `in` = PipedInputStream()
+        val out = PipedOutputStream()
+        val in2 = PipedInputStream()
+        val out2 = PipedOutputStream()
+        `in`.connect(out2)
+        out.connect(in2)
+
+        val client: MyClient = MyClientImpl()
+        val clientSideLauncher: Launcher<MyClient, MyServer> =
+            Launcher(`in`, out, client, MyServer::class, this)
+
+        // create server side
+        val server: MyServer = MyServerImpl()
+        val serverSideLauncher: Launcher<MyServer, MyClient> =
+            Launcher(in2, out2, server, MyClient::class, this)
+
+        val clientJob = clientSideLauncher.start()
+        val serverJob = serverSideLauncher.start()
+
+        val counter = AtomicInteger()
+
+        val clientTalking = launch {
+            for (i in 0 ..<100) {
+                launch {
+                    val param = MyParam(i.toString())
+                    val result = clientSideLauncher.remoteProxy.askServer(param)
+                    assertEquals(param, result)
+                    counter.incrementAndGet()
+                }
+            }
+        }
+        val serverTalking = launch {
+            for (i in 0 ..<100) {
+                launch {
+                    val param = MyParam(i.toString())
+                    val result =  serverSideLauncher.remoteProxy.askClient(param)
+                    assertEquals(param, result)
+                    counter.incrementAndGet()
+                }
+            }
+        }
+
+        clientTalking.join()
+        serverTalking.join()
+
+
+        out.close()
+        out2.close()
+
+
+        clientJob.join()
+        serverJob.join()
+
+        assertEquals(200, counter.get())
     }
 
     @Test
@@ -316,7 +371,7 @@ class IntegrationTest {
         out.close()
         out2.close()
 
-        testScheduler.advanceUntilIdle()
+        println("blah")
     }
 
     @Test
@@ -405,7 +460,7 @@ class IntegrationTest {
 
         val error2 =
             assertFailsWith<ResponseErrorException> { serverSideLauncher.remoteProxy.askClient(MyParam("FOO")) }
-//        val error2Cause = error2.cause as ResponseErrorException
+
         assertEquals(-32603, error2.responseError.code)
         assertEquals("Internal error.", error2.responseError.message)
 

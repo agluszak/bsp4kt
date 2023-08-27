@@ -1,12 +1,11 @@
 package json
 
-import com.jetbrains.jsonrpc4kt.IntEnum
-import com.jetbrains.jsonrpc4kt.json.serializers.EnumAsIntSerializer
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import org.jetbrains.jsonrpc4kt.json.serializers.EnumAsIntSerializer
 
 @Serializable(with = MyEnum.Companion::class)
-enum class MyEnum(override val value: Int) : IntEnum {
+enum class MyEnum(override val value: Int) : org.jetbrains.jsonrpc4kt.IntEnum {
     A(1),
     B(2),
     C(3);

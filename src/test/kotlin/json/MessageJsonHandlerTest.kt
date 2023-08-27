@@ -11,11 +11,11 @@
  */
 package json
 
-import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
-import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
-import com.jetbrains.jsonrpc4kt.messages.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
+import org.jetbrains.jsonrpc4kt.json.JsonRpcMethod
+import org.jetbrains.jsonrpc4kt.json.MessageJsonHandler
+import org.jetbrains.jsonrpc4kt.messages.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.util.function.Consumer

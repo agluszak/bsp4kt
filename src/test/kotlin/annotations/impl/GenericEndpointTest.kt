@@ -1,11 +1,11 @@
 package annotations.impl
 
 import LogMessageAccumulator
-import com.jetbrains.jsonrpc4kt.RemoteEndpoint
-import com.jetbrains.jsonrpc4kt.services.GenericEndpoint
-import com.jetbrains.jsonrpc4kt.services.JsonNotification
-import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.jsonrpc4kt.RemoteEndpoint
+import org.jetbrains.jsonrpc4kt.services.GenericEndpoint
+import org.jetbrains.jsonrpc4kt.services.JsonNotification
+import org.jetbrains.jsonrpc4kt.services.JsonRequest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.util.function.Predicate

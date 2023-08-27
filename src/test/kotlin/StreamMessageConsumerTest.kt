@@ -1,12 +1,12 @@
-import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
-import com.jetbrains.jsonrpc4kt.json.StreamMessageConsumer
-import com.jetbrains.jsonrpc4kt.messages.Message
-import com.jetbrains.jsonrpc4kt.messages.MessageId
-import com.jetbrains.jsonrpc4kt.messages.RequestMessage
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
+import org.jetbrains.jsonrpc4kt.json.MessageJsonHandler
+import org.jetbrains.jsonrpc4kt.json.StreamMessageConsumer
+import org.jetbrains.jsonrpc4kt.messages.Message
+import org.jetbrains.jsonrpc4kt.messages.MessageId
+import org.jetbrains.jsonrpc4kt.messages.RequestMessage
 import java.io.ByteArrayOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals

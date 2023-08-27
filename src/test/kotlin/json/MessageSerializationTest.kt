@@ -1,9 +1,9 @@
 package json
 
-import com.jetbrains.jsonrpc4kt.messages.*
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.json.*
 import kotlinx.serialization.serializer
+import org.jetbrains.jsonrpc4kt.messages.*
 import org.junit.jupiter.api.Test
 import kotlin.reflect.KClass
 import kotlin.reflect.cast

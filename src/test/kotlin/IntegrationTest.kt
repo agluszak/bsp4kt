@@ -1,15 +1,14 @@
-import com.jetbrains.jsonrpc4kt.Launcher
-import com.jetbrains.jsonrpc4kt.RemoteEndpoint
-import com.jetbrains.jsonrpc4kt.ResponseErrorException
-import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_LENGTH_HEADER
-import com.jetbrains.jsonrpc4kt.messages.Message.Companion.CRLF
-import com.jetbrains.jsonrpc4kt.services.JsonNotification
-import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.jetbrains.jsonrpc4kt.RemoteEndpoint
+import org.jetbrains.jsonrpc4kt.ResponseErrorException
+import org.jetbrains.jsonrpc4kt.messages.Message.Companion.CONTENT_LENGTH_HEADER
+import org.jetbrains.jsonrpc4kt.messages.Message.Companion.CRLF
+import org.jetbrains.jsonrpc4kt.services.JsonNotification
+import org.jetbrains.jsonrpc4kt.services.JsonRequest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.MethodOrderer
@@ -73,13 +72,13 @@ class IntegrationTest {
         `in`.connect(out2)
         out.connect(in2)
         val client = MyClientImpl()
-        val clientSideLauncher: Launcher<MyClient, MyServer> =
-            Launcher(`in`, out, client, MyServer::class, this)
+        val clientSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyClient, MyServer> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, client, MyServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(in2, out2, server, MyClient::class, this)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -109,13 +108,13 @@ class IntegrationTest {
         `in`.connect(out2)
         out.connect(in2)
         val client: MyClient = MyClientImpl()
-        val clientSideLauncher: Launcher<MyClient, MyServer> =
-            Launcher(`in`, out, client, MyServer::class, this)
+        val clientSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyClient, MyServer> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, client, MyServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(in2, out2, server, MyClient::class, this)
 
         val clientJob = clientSideLauncher.start()
         val serverJob = serverSideLauncher.start()
@@ -152,8 +151,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, server, MyClient::class, this)
 
         serverSideLauncher.start().join()
 
@@ -179,8 +178,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, server, MyClient::class, this)
 
         serverSideLauncher.start().join()
 
@@ -205,8 +204,8 @@ class IntegrationTest {
         val `in` = ByteArrayInputStream(clientMessage.toByteArray())
         val out = ByteArrayOutputStream()
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, server, MyClient::class, this)
 
         serverSideLauncher.start().join()
 
@@ -232,13 +231,13 @@ class IntegrationTest {
         out.connect(in2)
 
         val client: MyClient = MyClientImpl()
-        val clientSideLauncher: Launcher<MyClient, MyServer> =
-            Launcher(`in`, out, client, MyServer::class, this)
+        val clientSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyClient, MyServer> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, client, MyServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(in2, out2, server, MyClient::class, this)
 
         val clientJob = clientSideLauncher.start()
         val serverJob = serverSideLauncher.start()
@@ -246,7 +245,7 @@ class IntegrationTest {
         val counter = AtomicInteger()
 
         val clientTalking = launch {
-            for (i in 0 ..<100) {
+            for (i in 0..<100) {
                 launch {
                     val param = MyParam(i.toString())
                     val result = clientSideLauncher.remoteProxy.askServer(param)
@@ -256,10 +255,10 @@ class IntegrationTest {
             }
         }
         val serverTalking = launch {
-            for (i in 0 ..<100) {
+            for (i in 0..<100) {
                 launch {
                     val param = MyParam(i.toString())
-                    val result =  serverSideLauncher.remoteProxy.askClient(param)
+                    val result = serverSideLauncher.remoteProxy.askClient(param)
                     assertEquals(param, result)
                     counter.incrementAndGet()
                 }
@@ -294,8 +293,8 @@ class IntegrationTest {
                 throw UnsupportedOperationException("Unused by this test")
             }
         }
-        val clientSideLauncher: Launcher<MyClient, MyVoidServer> =
-            Launcher(`in`, out, client, MyVoidServer::class, this)
+        val clientSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyClient, MyVoidServer> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, client, MyVoidServer::class, this)
 
         // create server side
         val server: MyServer = object : MyServer {
@@ -303,8 +302,8 @@ class IntegrationTest {
                 return param
             }
         }
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(in2, out2, server, MyClient::class, this)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -347,11 +346,11 @@ class IntegrationTest {
                 return param
             }
         }
-        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class, this)
+        val clientSideLauncher = org.jetbrains.jsonrpc4kt.Launcher(`in`, out, client, MyVoidServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher = org.jetbrains.jsonrpc4kt.Launcher(in2, out2, server, MyClient::class, this)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -398,8 +397,8 @@ class IntegrationTest {
                 return param
             }
         }
-        val serverSideLauncher: Launcher<MyServer, MyClient> =
-            Launcher(`in`, out, server, MyClient::class, this)
+        val serverSideLauncher: org.jetbrains.jsonrpc4kt.Launcher<MyServer, MyClient> =
+            org.jetbrains.jsonrpc4kt.Launcher(`in`, out, server, MyClient::class, this)
 
 
         serverSideLauncher.start().join()
@@ -440,11 +439,11 @@ class IntegrationTest {
                 return param
             }
         }
-        val clientSideLauncher = Launcher(`in`, out, client, MyVoidServer::class, this)
+        val clientSideLauncher = org.jetbrains.jsonrpc4kt.Launcher(`in`, out, client, MyVoidServer::class, this)
 
         // create server side
         val server: MyServer = MyServerImpl()
-        val serverSideLauncher = Launcher(in2, out2, server, MyClient::class, this)
+        val serverSideLauncher = org.jetbrains.jsonrpc4kt.Launcher(in2, out2, server, MyClient::class, this)
 
         clientSideLauncher.start()
         serverSideLauncher.start()
@@ -486,7 +485,7 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
+            val serverSideLauncher = org.jetbrains.jsonrpc4kt.Launcher(`in`, out, server, MyClient::class, this)
 
             serverSideLauncher.start().join()
 
@@ -521,7 +520,7 @@ class IntegrationTest {
             val `in` = ByteArrayInputStream(clientMessages.toByteArray())
             val out = ByteArrayOutputStream()
             val server: MyServer = MyServerImpl()
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
+            val serverSideLauncher = org.jetbrains.jsonrpc4kt.Launcher(`in`, out, server, MyClient::class, this)
 
 
             serverSideLauncher.start().join()
@@ -562,7 +561,7 @@ class IntegrationTest {
             val server: UnexpectedParamsTestServer = object : UnexpectedParamsTestServer {
                 override fun myNotification() {}
             }
-            val serverSideLauncher = Launcher(`in`, out, server, MyClient::class, this)
+            val serverSideLauncher = org.jetbrains.jsonrpc4kt.Launcher(`in`, out, server, MyClient::class, this)
 
             serverSideLauncher.start().join()
 

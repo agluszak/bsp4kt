@@ -1,13 +1,12 @@
-import com.jetbrains.jsonrpc4kt.Launcher
-import com.jetbrains.jsonrpc4kt.services.JsonNotification
-import com.jetbrains.jsonrpc4kt.services.JsonRequest
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
-import org.junit.jupiter.api.Assertions.*
+import org.jetbrains.jsonrpc4kt.services.JsonNotification
+import org.jetbrains.jsonrpc4kt.services.JsonRequest
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.*
-import java.util.*
 import java.util.concurrent.CompletableFuture
 import kotlin.test.assertFailsWith
 
@@ -34,7 +33,13 @@ class LauncherTest {
         val a: A = object : A {
             override fun say(p: Param) {}
         }
-        val launcher = Launcher(ByteArrayInputStream("".toByteArray()), ByteArrayOutputStream(), a, A::class, this)
+        val launcher = org.jetbrains.jsonrpc4kt.Launcher(
+            ByteArrayInputStream("".toByteArray()),
+            ByteArrayOutputStream(),
+            a,
+            A::class,
+            this
+        )
         val startListening = launcher.start()
         startListening.join()
         assertTrue(startListening.isCompleted)
@@ -48,7 +53,7 @@ class LauncherTest {
         }
         val input = PipedInputStream()
         val outputStream = PipedOutputStream(input)
-        val launcher = Launcher(input, outputStream, a, A::class, this)
+        val launcher = org.jetbrains.jsonrpc4kt.Launcher(input, outputStream, a, A::class, this)
         val startListening = launcher.start()
         delay(100)
         startListening.cancelAndJoin()
@@ -67,7 +72,7 @@ class LauncherTest {
             ByteArrayInputStream("""Content-Length: 49$newlines{"jsonrpc": "2.0", "method": "foobar", "id": "1"}""".toByteArray())
         val outputStream = ByteArrayOutputStream()
 
-        val launcher = Launcher(inputStream, outputStream, a, A::class, this)
+        val launcher = org.jetbrains.jsonrpc4kt.Launcher(inputStream, outputStream, a, A::class, this)
         val startListening = launcher.start()
 
         startListening.join()
@@ -86,7 +91,7 @@ class LauncherTest {
                 return '\n'.code
             }
         }
-        val launcher = Launcher(input, ByteArrayOutputStream(), a, A::class, this)
+        val launcher = org.jetbrains.jsonrpc4kt.Launcher(input, ByteArrayOutputStream(), a, A::class, this)
         val startListening = launcher.start()
         startListening.cancel()
         startListening.join()

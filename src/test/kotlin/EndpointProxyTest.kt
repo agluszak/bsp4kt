@@ -1,9 +1,9 @@
-import com.jetbrains.jsonrpc4kt.services.JsonNotification
-import com.jetbrains.jsonrpc4kt.services.JsonRequest
-import com.jetbrains.jsonrpc4kt.services.ServiceEndpoints
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.jsonrpc4kt.services.JsonNotification
+import org.jetbrains.jsonrpc4kt.services.JsonRequest
+import org.jetbrains.jsonrpc4kt.services.ServiceEndpoints
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

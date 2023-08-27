@@ -1,10 +1,9 @@
 package annotations
 
 
-import com.jetbrains.jsonrpc4kt.Endpoint
-import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
-import com.jetbrains.jsonrpc4kt.services.*
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.jsonrpc4kt.json.JsonRpcMethod
+import org.jetbrains.jsonrpc4kt.services.*
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import java.util.function.Consumer
@@ -38,7 +37,7 @@ class EndpointsTest {
 
     @Test
     fun testProxy_01() = runTest {
-        val endpoint: Endpoint = object : Endpoint {
+        val endpoint: org.jetbrains.jsonrpc4kt.Endpoint = object : org.jetbrains.jsonrpc4kt.Endpoint {
             override suspend fun request(method: String, params: List<Any?>): Any {
                 assertEquals("foo/doStuff", method)
                 assertEquals("param", params[0])
@@ -57,7 +56,7 @@ class EndpointsTest {
 
     @Test
     fun testProxy_02() = runTest {
-        val endpoint: Endpoint = object : Endpoint {
+        val endpoint: org.jetbrains.jsonrpc4kt.Endpoint = object : org.jetbrains.jsonrpc4kt.Endpoint {
             override suspend fun request(method: String, params: List<Any?>): Any {
                 assertEquals("bar/doStuff2", method)
                 assertEquals("[param, 2]", params.toString())
@@ -77,7 +76,7 @@ class EndpointsTest {
     @Test
     @Ignore // TODO: do we want to support this?
     fun testBackAndForth() = runTest {
-        val endpoint: Endpoint = object : Endpoint {
+        val endpoint: org.jetbrains.jsonrpc4kt.Endpoint = object : org.jetbrains.jsonrpc4kt.Endpoint {
             override suspend fun request(method: String, params: List<Any?>): Any? {
                 assertEquals("foo/doStuff", method)
                 assertEquals("param", params[0])
@@ -90,7 +89,7 @@ class EndpointsTest {
             }
         }
         val intermediateFoo: Foo = ServiceEndpoints.toServiceObject(endpoint, Foo::class)
-        val secondEndpoint: Endpoint = ServiceEndpoints.toEndpoint(intermediateFoo)
+        val secondEndpoint: org.jetbrains.jsonrpc4kt.Endpoint = ServiceEndpoints.toEndpoint(intermediateFoo)
         val foo: Foo = ServiceEndpoints.toServiceObject(secondEndpoint, Foo::class)
         foo.myNotification("notificationParam")
         assertEquals("result", foo.doStuff("param"))

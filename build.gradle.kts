@@ -4,7 +4,7 @@ plugins {
     `maven-publish`
 }
 
-group = "org.jetbrains.bsp"
+group = "org.jetbrains"
 version = "0.0.1-SNAPSHOT"
 
 repositories {

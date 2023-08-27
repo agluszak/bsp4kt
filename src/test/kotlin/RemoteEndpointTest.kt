@@ -1,13 +1,12 @@
-import com.jetbrains.jsonrpc4kt.Endpoint
-import com.jetbrains.jsonrpc4kt.RemoteEndpoint
-import com.jetbrains.jsonrpc4kt.json.JsonRpcMethod
-import com.jetbrains.jsonrpc4kt.json.MessageJsonHandler
-import com.jetbrains.jsonrpc4kt.messages.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import org.jetbrains.jsonrpc4kt.RemoteEndpoint
+import org.jetbrains.jsonrpc4kt.json.JsonRpcMethod
+import org.jetbrains.jsonrpc4kt.json.MessageJsonHandler
+import org.jetbrains.jsonrpc4kt.messages.*
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -24,7 +23,7 @@ class RemoteEndpointTest {
         )
     )
 
-    internal open class TestEndpoint(val jsonHandler: MessageJsonHandler) : Endpoint {
+    internal open class TestEndpoint(val jsonHandler: MessageJsonHandler) : org.jetbrains.jsonrpc4kt.Endpoint {
         val notifications: Channel<NotificationMessage> = Channel()
         val requests: Channel<Pair<RequestMessage, CompletableDeferred<Any?>>> = Channel()
 
